@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Spotify Artiest Zoeken</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 min-h-screen">
+    <div class="container mx-auto px-4 py-8">
+        <h1 class="text-3xl font-bold text-center mb-8 text-indigo-700">Spotify Artiest Zoeker</h1>
+        
+        <div class="max-w-4xl mx-auto bg-white rounded-lg shadow-md p-6 mb-8">
+            <div class="flex flex-col md:flex-row gap-4 mb-6">
+                <input type="text" id="artistInput" placeholder="Voer artiestnaam in" 
+                    class="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                <button onclick="searchArtist()" 
+                    class="bg-indigo-600 text-white px-6 py-2 rounded-lg hover:bg-indigo-700 transition duration-200">
+                    Zoeken
+                </button>
+            </div>
+            
+            <select id="artistSelect" onchange="getLatestTracks(this.value)" 
+                class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 mb-4">
+                <option value="">Selecteer een artiest</option>
+            </select>
+        </div>
+
+        <!-- Favorites Section -->
+        <div id="favoritesContainer" class="max-w-4xl mx-auto bg-white rounded-lg shadow-md p-6 mb-8">
+            <h2 class="text-2xl font-bold mb-4 text-indigo-700">Favoriete Artiesten</h2>
+            <div id="favorites" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"></div>
+        </div>
+
+        <!-- Results Section -->
+        <div id="results" class="max-w-4xl mx-auto bg-white rounded-lg shadow-md p-6"></div>
+    </div>
+    
+    <script>
+        const clientId = '22db16be6a25441e977dd4d2d6617d71'; 
+        const clientSecret = 'c7db95f32a9347919b2899d72b4f2bc5';
+        let token = '';
+        let favorites = JSON.parse(localStorage.getItem('spotifyFavorites')) || [];
+
+        // Load favorites when page loads
+        window.addEventListener('DOMContentLoaded', () => {
+            displayFavorites();
+        });
+
+        async function getToken() {
+            const response = await fetch('https://accounts.spotify.com/api/token', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                },
+                body: `grant_type=client_credentials&client_id=${clientId}&client_secret=${clientSecret}`
+            });
+            const data = await response.json();
+            token = data.access_token;
+        }
+
+        async function searchArtist() {
+            const artistName = document.getElementById('artistInput').value;
+            if (!artistName) return;
+            
+            if (!token) await getToken();
+            
+            const response = await fetch(`https://api.spotify.com/v1/search?q=${artistName}&type=artist&limit=5`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            const data = await response.json();
+            const select = document.getElementById('artistSelect');
+            select.innerHTML = '<option value="">Selecteer een artiest</option>';
+            
+            data.artists.items.forEach(artist => {
+                let option = document.createElement('option');
+                option.value = artist.id;
+                option.textContent = artist.name;
+                option.dataset.img = artist.images.length > 0 ? artist.images[0].url : '';
+                select.appendChild(option);
+            });
+        }
+
+        async function getLatestTracks(artistId) {
+            if (!artistId) return;
+            
+            // Get artist details for adding to favorites
+            const artistResponse = await fetch(`https://api.spotify.com/v1/artists/${artistId}`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            const artist = await artistResponse.json();
+            
+            const response = await fetch(`https://api.spotify.com/v1/artists/${artistId}/albums?include_groups=single,album&limit=3&market=NL`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            const data = await response.json();
+            const latestAlbums = data.items;
+            
+            const artistImg = artist.images.length > 0 ? artist.images[0].url : '';
+            const isFavorite = favorites.some(fav => fav.id === artistId);
+            
+            let tracksHTML = `
+                <div class="flex items-center justify-between mb-6">
+                    <h2 class="text-2xl font-bold text-indigo-700">Nieuwste nummers van ${artist.name}</h2>
+                    <button onclick="toggleFavorite('${artistId}', '${artist.name}', '${artistImg}')" 
+                        class="px-4 py-2 rounded-lg ${isFavorite ? 'bg-red-500 hover:bg-red-600' : 'bg-indigo-600 hover:bg-indigo-700'} text-white transition">
+                        ${isFavorite ? 'Verwijder uit favorieten' : 'Voeg toe aan favorieten'}
+                    </button>
+                </div>
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            `;
+            
+            for (let album of latestAlbums) {
+                const albumResponse = await fetch(`https://api.spotify.com/v1/albums/${album.id}/tracks?limit=1`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                const albumData = await albumResponse.json();
+                const track = albumData.items[0];
+                
+                if (track) {
+                    // Get full track info including available_markets
+                    const trackResponse = await fetch(`https://api.spotify.com/v1/tracks/${track.id}`, {
+                        headers: { 'Authorization': `Bearer ${token}` }
+                    });
+                    const trackData = await trackResponse.json();
+                    
+                    const albumImg = album.images.length > 0 ? album.images[0].url : '';
+                    
+                    tracksHTML += `
+                        <div class="track bg-gray-50 rounded-lg overflow-hidden shadow">
+                            <img src="${albumImg}" alt="${album.name}" class="w-full h-48 object-cover">
+                            <div class="p-4">
+                                <p class="font-bold text-lg mb-2">${track.name}</p>
+                                <p class="text-gray-600 mb-4">Album: ${album.name}</p>
+                                ${trackData.preview_url ? 
+                                  `<audio controls src="${trackData.preview_url}" class="w-full mb-4"></audio>` : 
+                                  '<p class="text-red-500 mb-4">Preview niet beschikbaar</p>'}
+                                <a href="${trackData.external_urls.spotify}" target="_blank" 
+                                   class="block text-center bg-green-600 text-white py-2 rounded hover:bg-green-700 transition">
+                                   Luister op Spotify
+                                </a>
+                            </div>
+                        </div>
+                    `;
+                }
+            }
+            
+            tracksHTML += '</div>';
+            document.getElementById('results').innerHTML = tracksHTML;
+        }
+        
+        function toggleFavorite(artistId, artistName, artistImg) {
+            const existingIndex = favorites.findIndex(fav => fav.id === artistId);
+            
+            if (existingIndex >= 0) {
+                favorites.splice(existingIndex, 1);
+            } else {
+                favorites.push({ id: artistId, name: artistName, img: artistImg });
+            }
+            
+            localStorage.setItem('spotifyFavorites', JSON.stringify(favorites));
+            displayFavorites();
+            
+            // Refresh the current artist view to update favorite button
+            if (document.getElementById('artistSelect').value === artistId) {
+                getLatestTracks(artistId);
+            }
+        }
+        
+        function displayFavorites() {
+            const container = document.getElementById('favorites');
+            
+            if (favorites.length === 0) {
+                container.innerHTML = '<p class="col-span-full text-gray-500 text-center py-4">Je hebt nog geen favoriete artiesten toegevoegd</p>';
+                return;
+            }
+            
+            let html = '';
+            favorites.forEach(artist => {
+                html += `
+                    <div class="favorite-artist bg-gray-50 rounded-lg overflow-hidden shadow flex flex-col">
+                        <div class="h-36 bg-gray-200 overflow-hidden">
+                            ${artist.img ? `<img src="${artist.img}" alt="${artist.name}" class="w-full h-full object-cover">` : ''}
+                        </div>
+                        <div class="p-4 flex-grow flex flex-col">
+                            <h3 class="font-bold mb-2">${artist.name}</h3>
+                            <div class="mt-auto flex gap-2">
+                                <button onclick="getLatestTracks('${artist.id}')" 
+                                    class="flex-1 bg-indigo-600 text-white py-2 rounded hover:bg-indigo-700 transition">
+                                    Bekijk
+                                </button>
+                                <button onclick="toggleFavorite('${artist.id}')" 
+                                    class="bg-red-500 text-white p-2 rounded hover:bg-red-600 transition">
+                                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-5 h-5">
+                                        <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+                                    </svg>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            });
+            container.innerHTML = html;
+        }
+    </script>
+</body>
+</html>
