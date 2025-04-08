@@ -8,6 +8,7 @@ class MusicAlertApp {
         this.lastSearchResults = [];
         this.notificationsEnabled = false;
         this.exportImportModalOpen = false;
+        this.releaseAgeDays = parseInt(localStorage.getItem('releaseAgeDays')) || 7; // Default to 7 days
     }
     
     /**
@@ -117,11 +118,20 @@ class MusicAlertApp {
         if (!artistId) return;
         
         try {
+            ui.showLoading('Artiest informatie ophalen...');
+            
             // Get artist details
             const artist = await api.getArtist(artistId);
+            if (!artist) {
+                throw new Error('Artist information could not be retrieved');
+            }
+            
+            ui.showLoading('Releases ophalen...');
             
             // Get latest releases
             const albums = await api.getArtistReleases(artistId);
+            
+            ui.showLoading('Vergelijkbare artiesten ophalen...');
             
             // Get related artists
             const relatedArtists = await api.getRelatedArtists(artistId);
@@ -131,7 +141,11 @@ class MusicAlertApp {
             
             // Scroll to results
             document.getElementById('results').scrollIntoView({ behavior: 'smooth' });
+            
+            ui.showMessage(`Muziek van ${artist.name} geladen`, 'success');
         } catch (error) {
+            ui.hideLoading();
+            ui.showError('Er is een fout opgetreden bij het ophalen van de muziek. Probeer het later opnieuw.');
             console.error('Error in getLatestTracks:', error);
         }
     }
@@ -203,7 +217,12 @@ class MusicAlertApp {
         }
         
         try {
-            const newReleases = await api.checkNewReleases(this.favorites);
+            if (!background) {
+                ui.showLoading('Nieuwe releases controleren...');
+            }
+            
+            // Pass the releaseAgeDays parameter to the API call
+            const newReleases = await api.checkNewReleases(this.favorites, this.releaseAgeDays);
             
             // If this is a background check and we have new releases, send notifications
             if (background && newReleases.length > 0 && this.notificationsEnabled) {
@@ -212,14 +231,42 @@ class MusicAlertApp {
             
             // Only update UI if not a background check
             if (!background) {
+                console.log(`Displaying ${newReleases.length} new releases in the UI`);
                 ui.displayNotifications(newReleases);
+                ui.hideLoading();
             }
             
             return newReleases;
         } catch (error) {
+            if (!background) {
+                ui.hideLoading();
+                ui.showError('Er is een fout opgetreden bij het controleren op nieuwe releases.');
+            }
             console.error('Error checking new releases:', error);
             return [];
         }
+    }
+    
+    /**
+     * Set the number of days to consider a release as "new"
+     * @param {number} days - Number of days (1-14)
+     */
+    setReleaseAgeDays(days) {
+        // Validate the input
+        days = parseInt(days);
+        if (isNaN(days) || days < 1) {
+            days = 7; // Default to 7 if invalid
+        } else if (days > 14) {
+            days = 14; // Cap at 14 days
+        }
+        
+        this.releaseAgeDays = days;
+        localStorage.setItem('releaseAgeDays', days.toString());
+        
+        // Refresh notifications with new setting
+        this.checkNewReleases();
+        
+        ui.showMessage(`Je ziet nu releases van de afgelopen ${days} dagen`, 'success');
     }
     
     /**

@@ -171,11 +171,17 @@ class SpotifyApiService {
                 headers
             });
             
+            if (!response.ok) {
+                throw new Error(`API returned status ${response.status}`);
+            }
+            
             const data = await response.json();
             
             if (data.error) {
                 throw new Error(`API error: ${data.error.message}`);
             }
+            
+            console.log(`Found ${data.items.length} releases for artist ${artistId}`);
             
             // Sort releases by release date (newest first)
             const sortedReleases = data.items.sort((a, b) => {
@@ -209,20 +215,35 @@ class SpotifyApiService {
             
             // Take the most recent unique releases
             const latestReleases = Array.from(uniqueReleases.values()).slice(0, limit);
+            console.log(`After deduplication, showing ${latestReleases.length} releases`);
             
             // Get full album details with tracks
             const albumsWithTracks = await Promise.all(latestReleases.map(async (album) => {
-                const albumResponse = await fetch(`https://api.spotify.com/v1/albums/${album.id}`, { headers });
-                return await albumResponse.json();
+                try {
+                    const albumResponse = await fetch(`https://api.spotify.com/v1/albums/${album.id}`, { headers });
+                    
+                    if (!albumResponse.ok) {
+                        console.error(`Error fetching album ${album.id}: ${albumResponse.status}`);
+                        return null;
+                    }
+                    
+                    return await albumResponse.json();
+                } catch (error) {
+                    console.error(`Error processing album ${album.id}:`, error);
+                    return null;
+                }
             }));
             
+            // Filter out any null values from failed album fetches
+            const validAlbums = albumsWithTracks.filter(album => album !== null);
+            
             ui.hideLoading();
-            return albumsWithTracks;
+            return validAlbums;
         } catch (error) {
             ui.hideLoading();
             ui.showError('Er is een fout opgetreden bij het ophalen van releases. Probeer het opnieuw.');
             console.error('Error fetching artist releases:', error);
-            throw error;
+            return [];
         }
     }
 
@@ -277,85 +298,124 @@ class SpotifyApiService {
     /**
      * Check for new releases from favorite artists
      */
-    async checkNewReleases(favorites) {
+    async checkNewReleases(favorites, releaseAgeDays = 7) {
         try {
             if (!favorites.length) return [];
+            
+            ui.showLoading('Nieuwe releases controleren...');
             
             const headers = await this.getHeaders();
             const lastCheck = parseInt(localStorage.getItem('lastReleaseCheck') || '0');
             const now = Date.now();
-            localStorage.setItem('lastReleaseCheck', now.toString());
             
-            // Look back 7 days (in milliseconds)
-            const lookBackPeriod = 7 * 24 * 60 * 60 * 1000;
+            // Look back the specified number of days (in milliseconds)
+            const lookBackPeriod = releaseAgeDays * 24 * 60 * 60 * 1000;
+            const cutoffDate = now - lookBackPeriod;
+            
+            console.log(`Checking for releases since ${new Date(cutoffDate).toLocaleDateString()} (${releaseAgeDays} days)`);
             
             let newReleases = [];
             let processedAlbumIds = new Set(); // Track album IDs to prevent duplicates
             
-            for (const artist of favorites) {
-                const response = await fetch(`https://api.spotify.com/v1/artists/${artist.id}/albums?include_groups=single,album&limit=10&market=NL`, {
-                    headers
-                });
+            // Process favorites in batches to reduce API load
+            const batchSize = 5;
+            for (let i = 0; i < favorites.length; i += batchSize) {
+                const batch = favorites.slice(i, i + batchSize);
                 
-                const data = await response.json();
-                
-                if (data.error) continue;
-                
-                // Find albums released since last check
-                const artistNewReleases = data.items.filter(album => {
-                    const releaseDate = new Date(album.release_date).getTime();
-                    // Check if album is recent and not already processed
-                    return releaseDate > lastCheck - lookBackPeriod && !processedAlbumIds.has(album.id);
-                });
-                
-                for (const album of artistNewReleases) {
-                    // Mark this album as processed
-                    processedAlbumIds.add(album.id);
-                    
-                    // Check if this is a collaboration by looking at all artists on the album
-                    const collaboratingArtists = album.artists.map(a => a.id);
-                    
-                    // Find primary artist (the first favorite artist that's on this album)
-                    let primaryArtist = artist;
-                    
-                    // If this is a collab with another favorite artist, use the one with earlier position in favorites
-                    if (collaboratingArtists.length > 1) {
-                        const favoriteCollaborators = favorites.filter(fav => 
-                            collaboratingArtists.includes(fav.id) && fav.id !== artist.id
-                        );
-                        
-                        if (favoriteCollaborators.length > 0) {
-                            // Use first favorite artist in the list as primary
-                            const firstFavoriteIndex = Math.min(
-                                favorites.findIndex(f => f.id === artist.id),
-                                ...favoriteCollaborators.map(fc => favorites.findIndex(f => f.id === fc.id))
-                            );
-                            primaryArtist = favorites[firstFavoriteIndex];
+                for (const artist of batch) {
+                    try {
+                        // Wait a small delay between artists in a batch
+                        if (i > 0) {
+                            await new Promise(resolve => setTimeout(resolve, 100));
                         }
-                    }
-                    
-                    // Get all collaborating artist names for display
-                    let collaborationInfo = null;
-                    if (album.artists.length > 1) {
-                        const otherArtistNames = album.artists
-                            .filter(a => a.id !== primaryArtist.id)
-                            .map(a => a.name);
                         
-                        if (otherArtistNames.length > 0) {
-                            collaborationInfo = {
-                                isCollaboration: true,
-                                collaboratingArtists: otherArtistNames
-                            };
+                        const response = await fetch(`https://api.spotify.com/v1/artists/${artist.id}/albums?include_groups=single,album&limit=10&market=NL`, {
+                            headers
+                        });
+                        
+                        if (!response.ok) {
+                            console.error(`Error fetching albums for artist ${artist.name}: ${response.status}`);
+                            continue;
                         }
+                        
+                        const data = await response.json();
+                        
+                        if (data.error) {
+                            console.error(`API error for artist ${artist.name}:`, data.error);
+                            continue;
+                        }
+                        
+                        // Find albums released within the lookback period
+                        const recentReleases = data.items.filter(album => {
+                            const releaseDate = new Date(album.release_date).getTime();
+                            // Check if album is recent and not already processed
+                            return releaseDate > cutoffDate && !processedAlbumIds.has(album.id);
+                        });
+                        
+                        console.log(`Found ${recentReleases.length} recent releases for ${artist.name}`);
+                        
+                        for (const album of recentReleases) {
+                            // Mark this album as processed
+                            processedAlbumIds.add(album.id);
+                            
+                            // Check if this is a collaboration by looking at all artists on the album
+                            const collaboratingArtists = album.artists.map(a => a.id);
+                            
+                            // Find primary artist (the first favorite artist that's on this album)
+                            let primaryArtist = artist;
+                            
+                            // If this is a collab with another favorite artist, use the one with earlier position in favorites
+                            if (collaboratingArtists.length > 1) {
+                                const favoriteCollaborators = favorites.filter(fav => 
+                                    collaboratingArtists.includes(fav.id) && fav.id !== artist.id
+                                );
+                                
+                                if (favoriteCollaborators.length > 0) {
+                                    // Use first favorite artist in the list as primary
+                                    const firstFavoriteIndex = Math.min(
+                                        favorites.findIndex(f => f.id === artist.id),
+                                        ...favoriteCollaborators.map(fc => favorites.findIndex(f => f.id === fc.id))
+                                    );
+                                    primaryArtist = favorites[firstFavoriteIndex];
+                                }
+                            }
+                            
+                            // Get all collaborating artist names for display
+                            let collaborationInfo = null;
+                            if (album.artists.length > 1) {
+                                const otherArtistNames = album.artists
+                                    .filter(a => a.id !== primaryArtist.id)
+                                    .map(a => a.name);
+                                
+                                if (otherArtistNames.length > 0) {
+                                    collaborationInfo = {
+                                        isCollaboration: true,
+                                        collaboratingArtists: otherArtistNames
+                                    };
+                                }
+                            }
+                            
+                            newReleases.push({
+                                artist: primaryArtist,
+                                album: album,
+                                collaborationInfo: collaborationInfo
+                            });
+                        }
+                    } catch (error) {
+                        console.error(`Error processing artist ${artist.name}:`, error);
                     }
-                    
-                    newReleases.push({
-                        artist: primaryArtist,
-                        album: album,
-                        collaborationInfo: collaborationInfo
-                    });
+                }
+                
+                // Add a small delay between batches
+                if (i + batchSize < favorites.length) {
+                    await new Promise(resolve => setTimeout(resolve, 500));
                 }
             }
+            
+            console.log(`Found a total of ${newReleases.length} new releases within the last ${releaseAgeDays} days`);
+            
+            // Only update last check time if we successfully processed all artists
+            localStorage.setItem('lastReleaseCheck', now.toString());
             
             ui.hideLoading();
             return newReleases;

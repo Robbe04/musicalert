@@ -57,6 +57,9 @@ class UIService {
         
         // Initialize mobile menu
         this.initializeMobileMenu();
+
+        // Initialize release age setting
+        this.initializeReleaseAgeSetting();
     }
 
     /**
@@ -460,17 +463,17 @@ class UIService {
                             `<p class="text-gray-600 text-sm mb-3 truncate">${this.formatGenreName(artist.genres[0] || '')}</p>` : 
                             '<p class="text-gray-600 text-sm mb-3">DJ / Producer</p>'
                         }
-                        <div class="mt-auto flex gap-2">
+                        <div class="mt-auto flex gap-1 sm:gap-2">
                             <button onclick="app.getLatestTracks('${artist.id}')" 
-                                class="flex-1 bg-primary hover:bg-primary-dark text-white py-2 rounded-lg transition flex items-center justify-center">
-                                <i class="fas fa-headphones mr-2"></i>Muziek
+                                class="flex-1 bg-primary hover:bg-primary-dark text-white py-1 sm:py-2 rounded-lg transition flex items-center justify-center text-xs sm:text-sm">
+                                <i class="fas fa-headphones mr-1 sm:mr-2"></i>Muziek
                             </button>
                             <button onclick="app.toggleFavorite('${artist.id}')" 
-                                class="bg-red-500 hover:bg-red-600 text-white p-2 rounded-lg transition">
+                                class="bg-red-500 hover:bg-red-600 text-white p-1 sm:p-2 rounded-lg transition">
                                 <i class="fas fa-heart-broken"></i>
                             </button>
                             <button onclick="app.shareArtist('${artist.name}')"
-                                class="bg-blue-500 hover:bg-blue-600 text-white p-2 rounded-lg transition">
+                                class="bg-blue-500 hover:bg-blue-600 text-white p-1 sm:p-2 rounded-lg transition">
                                 <i class="fas fa-share-alt"></i>
                             </button>
                         </div>
@@ -620,17 +623,17 @@ class UIService {
                             <p class="text-gray-600 text-sm mb-3">
                                 ${album.album_type.charAt(0).toUpperCase() + album.album_type.slice(1)} • ${album.total_tracks} ${album?.total_tracks == '1' ? 'nummer' : 'nummers'}
                             </p>
-                            <div class="flex gap-2">
+                            <div class="flex gap-1 sm:gap-2">
                                 <a href="${album.external_urls.spotify}" target="_blank" 
-                                  class="flex-1 text-center bg-green-600 hover:bg-green-700 text-white py-2 rounded-lg transition">
-                                  <i class="fab fa-spotify mr-2"></i>Beluisteren
+                                  class="flex-1 text-center bg-green-600 hover:bg-green-700 text-white py-1 sm:py-2 text-xs sm:text-sm rounded-lg transition">
+                                  <i class="fab fa-spotify mr-1 sm:mr-2"></i>Beluisteren
                                 </a>
                                 <button onclick="app.getLatestTracks('${artist.id}')" 
-                                  class="flex-1 bg-primary hover:bg-primary-dark text-white py-2 rounded-lg transition">
+                                  class="flex-1 bg-primary hover:bg-primary-dark text-white py-1 sm:py-2 text-xs sm:text-sm rounded-lg transition">
                                   Meer bekijken
                                 </button>
                                 <button onclick="app.shareRelease('${artist.name}', '${album.name}', '${album.external_urls.spotify}')" 
-                                  class="bg-blue-500 hover:bg-blue-600 text-white p-2 rounded-lg transition">
+                                  class="bg-blue-500 hover:bg-blue-600 text-white p-1 sm:p-2 rounded-lg transition">
                                   <i class="fas fa-share-alt"></i>
                                 </button>
                             </div>
@@ -685,6 +688,46 @@ class UIService {
                 debounceTimer = setTimeout(() => {
                     app.checkNewReleases();
                 }, 300);
+            });
+        }
+    }
+
+    /**
+     * Initialize release age setting
+     */
+    initializeReleaseAgeSetting() {
+        const releaseAgeInput = document.getElementById('release-age');
+        const releaseAgeApplyBtn = document.getElementById('release-age-apply');
+        
+        if (releaseAgeInput && releaseAgeApplyBtn) {
+            // Set initial value from app settings
+            releaseAgeInput.value = app.releaseAgeDays;
+            
+            // Apply button click handler
+            releaseAgeApplyBtn.addEventListener('click', () => {
+                const days = parseInt(releaseAgeInput.value);
+                app.setReleaseAgeDays(days);
+            });
+            
+            // Also apply when pressing Enter in the input
+            releaseAgeInput.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') {
+                    const days = parseInt(releaseAgeInput.value);
+                    app.setReleaseAgeDays(days);
+                }
+            });
+            
+            // Validate input on blur (when leaving the field)
+            releaseAgeInput.addEventListener('blur', () => {
+                let days = parseInt(releaseAgeInput.value);
+                
+                if (isNaN(days) || days < 1) {
+                    days = 7; // Reset to default
+                } else if (days > 14) {
+                    days = 14; // Cap at 14
+                }
+                
+                releaseAgeInput.value = days;
             });
         }
     }
@@ -1403,6 +1446,26 @@ class UIService {
                     installButton.classList.add('hidden');
                 }
             }
+        }
+    }
+
+    /**
+     * Toggle track list visibility
+     */
+    toggleTrackList(albumId) {
+        const trackList = document.getElementById(`tracklist-${albumId}`);
+        const icon = document.getElementById(`tracklist-icon-${albumId}`);
+        
+        if (trackList && icon) {
+            trackList.classList.toggle('hidden');
+            
+            if (trackList.classList.contains('hidden')) {
+                icon.classList.remove('fa-chevron-up');
+                icon.classList.add('fa-chevron-down');
+            } else {
+                icon.classList.remove('fa-chevron-down');
+                icon.classList.add('fa-chevron-up');
+           }
         }
     }
 }
