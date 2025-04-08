@@ -461,9 +461,17 @@
     </div>
     
     <!-- API Rate Limit Message -->
-    <div id="api-rate-limit-message" class="fixed top-4 right-4 z-50 api-error-message hidden animate__animated animate__fadeInDown">
+    <div id="api-rate-limit-message" class="api-error-message hidden animate__animated animate__fadeInDown">
         <i class="fas fa-exclamation-triangle"></i>
         <span>Spotify API limiet bereikt. Sommige functies kunnen tijdelijk niet beschikbaar zijn.</span>
+        <button onclick="debugHelper.createApiStatusIndicator()">
+            <i class="fas fa-info-circle"></i>
+        </button>
+    </div>
+
+    <!-- API Rate Limit Banner (for showing countdown) -->
+    <div id="api-rate-limit-banner">
+        <strong>API Limiet Bereikt</strong> - Automatisch proberen over <span id="api-countdown">--</span>
     </div>
     
     <!-- Export/Import Modal -->

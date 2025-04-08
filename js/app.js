@@ -721,6 +721,24 @@ class MusicAlertApp {
             }
         }
     }
+
+    /**
+     * Check API status
+     */
+    checkApiStatus() {
+        const stats = api.getApiStats();
+        
+        if (stats.isRateLimited) {
+            ui.showMessage(`API is momenteel gelimiteerd. Je kunt weer requests doen over ${stats.rateLimitedFor} seconden.`, 'error');
+        } else {
+            ui.showMessage(`API is beschikbaar voor requests. Token verloopt over ${stats.tokenExpiresIn} seconden.`, 'success');
+        }
+        
+        // Toon altijd de API status indicator
+        debugHelper.createApiStatusIndicator();
+        
+        return stats;
+    }
 }
 
 // Initialize app

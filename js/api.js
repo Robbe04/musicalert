@@ -76,6 +76,11 @@ class SpotifyApiService {
             const waitTime = Math.ceil((this.rateLimitedUntil - Date.now()) / 1000);
             console.warn(`Rate limited. Waiting ${waitTime} seconds before retrying.`);
             
+            // Show the API status indicator
+            if (typeof DebugHelper !== 'undefined') {
+                DebugHelper.createApiStatusIndicator();
+            }
+            
             // Create a promise that will resolve when the rate limit expires
             return new Promise((resolve, reject) => {
                 this.addToQueue({ url, options, resolve, reject });
@@ -92,12 +97,21 @@ class SpotifyApiService {
             
             // Handle rate limiting
             if (response.status === 429) {
+                // Get retry time from headers, or use default (30 seconds)
                 const retryAfter = parseInt(response.headers.get('Retry-After') || '30');
                 this.rateLimitedUntil = Date.now() + (retryAfter * 1000);
+                
+                // Save the original rate limit
+                localStorage.setItem('initialRateLimit', retryAfter.toString());
                 
                 // Notify user about rate limiting
                 ui.showMessage(`Spotify API limiet bereikt. Wacht ${retryAfter} seconden voordat je verder gaat.`, 'error');
                 console.warn(`Rate limited by Spotify API. Retry after ${retryAfter} seconds.`);
+                
+                // Show the API status indicator
+                if (typeof DebugHelper !== 'undefined') {
+                    DebugHelper.createApiStatusIndicator();
+                }
                 
                 // Add the request to the queue
                 return new Promise((resolve, reject) => {
@@ -522,11 +536,18 @@ class SpotifyApiService {
      * Get stats about Spotify API usage
      */
     getApiStats() {
+        // Get the initial rate limit from localStorage if available
+        const initialRateLimit = parseInt(localStorage.getItem('initialRateLimit') || '30');
+        const rateLimitedFor = Math.max(0, Math.floor((this.rateLimitedUntil - Date.now()) / 1000));
+        const pctComplete = 100 - ((rateLimitedFor / initialRateLimit) * 100);
+        
         return {
             tokenExpiresIn: Math.max(0, Math.floor((this.tokenExpiresAt - Date.now()) / 1000)),
-            rateLimitedFor: Math.max(0, Math.floor((this.rateLimitedUntil - Date.now()) / 1000)),
+            rateLimitedFor: rateLimitedFor,
             queuedRequests: this.requestQueue.length,
-            isRateLimited: Date.now() < this.rateLimitedUntil
+            isRateLimited: Date.now() < this.rateLimitedUntil,
+            initialRateLimit: initialRateLimit,
+            rateLimitPctComplete: Math.min(100, Math.max(0, pctComplete))
         };
     }
 }

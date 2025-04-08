@@ -274,6 +274,149 @@ const DebugHelper = {
     },
     
     /**
+     * Create a status indicator for API rate limits
+     */
+    createApiStatusIndicator() {
+        // Remove existing indicator if present
+        const existingIndicator = document.getElementById('api-status-indicator');
+        if (existingIndicator) {
+            existingIndicator.remove();
+        }
+        
+        // Create indicator
+        const indicator = document.createElement('div');
+        indicator.id = 'api-status-indicator';
+        indicator.className = 'fixed bottom-4 right-4 bg-white dark:bg-gray-800 rounded-lg shadow-lg p-3 z-50 text-sm border border-gray-200 dark:border-gray-700';
+        
+        indicator.innerHTML = `
+            <div class="flex items-center justify-between mb-2">
+                <span class="font-bold">Spotify API Status</span>
+                <button id="api-status-close" class="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div id="api-status-content" class="space-y-2">
+                <div class="flex justify-between">
+                    <span>Status:</span>
+                    <span id="api-status-state" class="font-medium text-green-500">Beschikbaar</span>
+                </div>
+                <div class="flex justify-between">
+                    <span>Volgende reset:</span>
+                    <span id="api-status-reset-time" class="font-medium">-</span>
+                </div>
+                <div class="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2.5 mt-1">
+                    <div id="api-status-progress" class="bg-primary h-2.5 rounded-full" style="width: 100%"></div>
+                </div>
+            </div>
+        `;
+        
+        document.body.appendChild(indicator);
+        
+        // Add event listener to close button
+        document.getElementById('api-status-close').addEventListener('click', () => {
+            indicator.remove();
+            clearInterval(this.apiStatusInterval);
+        });
+        
+        // Update status immediately
+        this.updateApiStatusIndicator();
+        
+        // Setup interval to update status
+        this.apiStatusInterval = setInterval(() => this.updateApiStatusIndicator(), 1000);
+        
+        return indicator;
+    },
+    
+    /**
+     * Update API status indicator
+     */
+    updateApiStatusIndicator() {
+        const statusState = document.getElementById('api-status-state');
+        const resetTime = document.getElementById('api-status-reset-time');
+        const progressBar = document.getElementById('api-status-progress');
+        
+        if (!statusState || !resetTime || !progressBar) return;
+        
+        const stats = api.getApiStats();
+        
+        if (stats.isRateLimited) {
+            // API is rate limited
+            statusState.textContent = 'Gelimiteerd';
+            statusState.className = 'font-medium text-red-500';
+            
+            // Show countdown
+            resetTime.textContent = this.formatTimeRemaining(stats.rateLimitedFor);
+            
+            // Calculate percentage of time remaining (assuming 30s is common rate limit duration)
+            const initialLimit = 30; // default to 30 seconds if we don't know actual limit
+            const pctRemaining = (stats.rateLimitedFor / initialLimit) * 100;
+            progressBar.style.width = `${Math.min(100, pctRemaining)}%`;
+            progressBar.className = 'bg-red-500 h-2.5 rounded-full';
+            
+            // Show message in UI
+            this.showRateLimitMessage(stats.rateLimitedFor);
+        } else {
+            // API is available
+            statusState.textContent = 'Beschikbaar';
+            statusState.className = 'font-medium text-green-500';
+            
+            // Token info
+            resetTime.textContent = stats.tokenExpiresIn > 0 ? 
+                `Token: ${this.formatTimeRemaining(stats.tokenExpiresIn)}` : 
+                'Token needed';
+            
+            // Progress bar
+            progressBar.style.width = '100%';
+            progressBar.className = 'bg-primary h-2.5 rounded-full';
+            
+            // Hide message if present
+            this.hideRateLimitMessage();
+        }
+    },
+    
+    /**
+     * Format time remaining in a human-readable format
+     */
+    formatTimeRemaining(seconds) {
+        if (seconds < 60) {
+            return `${seconds}s`;
+        } else {
+            const mins = Math.floor(seconds / 60);
+            const secs = seconds % 60;
+            return `${mins}m ${secs}s`;
+        }
+    },
+    
+    /**
+     * Show rate limit message in UI
+     */
+    showRateLimitMessage(seconds) {
+        const message = document.getElementById('api-rate-limit-message');
+        if (!message) return;
+        
+        // Update message text with countdown
+        const messageText = message.querySelector('span');
+        if (messageText) {
+            messageText.textContent = `Spotify API limiet bereikt. Je kunt weer nieuwe verzoeken doen over ${this.formatTimeRemaining(seconds)}.`;
+        }
+        
+        // Show message if hidden
+        if (message.classList.contains('hidden')) {
+            message.classList.remove('hidden');
+        }
+    },
+    
+    /**
+     * Hide rate limit message in UI
+     */
+    hideRateLimitMessage() {
+        const message = document.getElementById('api-rate-limit-message');
+        if (!message || message.classList.contains('hidden')) return;
+        
+        message.classList.add('hidden');
+    },
+    
+    /**
      * Run all tests
      */
     async runAllTests() {
@@ -322,5 +465,14 @@ document.addEventListener('keydown', (e) => {
     }
 });
 
+// Add keyboard shortcut for API status indicator (Ctrl+Shift+A)
+document.addEventListener('keydown', (e) => {
+    if (e.ctrlKey && e.shiftKey && e.key === 'A') {
+        e.preventDefault();
+        DebugHelper.createApiStatusIndicator();
+    }
+});
+
 console.log("Debug helper loaded. Type debugHelper.runAllTests() in the console to run diagnostics.");
 console.log("Press Ctrl+Shift+D to toggle the debug drawer.");
+console.log("Press Ctrl+Shift+A to show the API status indicator.");

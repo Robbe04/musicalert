@@ -529,6 +529,9 @@ select:focus-visible {
 
 /* API Error message styling */
 .api-error-message {
+    position: fixed;
+    top: 1rem;
+    right: 1rem;
     background-color: rgba(220, 38, 38, 0.9);
     color: white;
     padding: 0.75rem 1rem;
@@ -536,9 +539,76 @@ select:focus-visible {
     margin-bottom: 1rem;
     display: flex;
     align-items: center;
+    max-width: 90%;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    z-index: 100;
+    animation: slideInDown 0.3s, pulse 2s infinite;
+}
+
+@keyframes pulse {
+    0% { box-shadow: 0 0 0 0 rgba(220, 38, 38, 0.4); }
+    70% { box-shadow: 0 0 0 10px rgba(220, 38, 38, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(220, 38, 38, 0); }
+}
+
+@keyframes slideInDown {
+    from { transform: translateY(-20px); opacity: 0; }
+    to { transform: translateY(0); opacity: 1; }
 }
 
 .api-error-message i {
     margin-right: 0.5rem;
     font-size: 1.25rem;
+}
+
+.api-error-message button {
+    background: none;
+    border: none;
+    color: white;
+    margin-left: 0.5rem;
+    cursor: pointer;
+    opacity: 0.8;
+}
+
+.api-error-message button:hover {
+    opacity: 1;
+}
+
+/* API Status Indicator */
+#api-status-indicator {
+    transition: all 0.3s ease;
+    width: 250px;
+    font-family: 'Consolas', 'Monaco', monospace;
+}
+
+#api-status-indicator button {
+    transition: all 0.2s ease;
+}
+
+#api-status-indicator button:hover {
+    opacity: 0.8;
+}
+
+#api-status-progress {
+    transition: width 0.3s ease;
+}
+
+/* API Rate Limit Banner (persistent notification) */
+#api-rate-limit-banner {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    background-color: rgba(220, 38, 38, 0.95);
+    color: white;
+    text-align: center;
+    padding: 0.5rem;
+    font-size: 0.875rem;
+    z-index: 100;
+    transform: translateY(-100%);
+    transition: transform 0.3s ease;
+}
+
+#api-rate-limit-banner.visible {
+    transform: translateY(0);
 }
