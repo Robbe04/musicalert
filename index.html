@@ -5,6 +5,25 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>MusicAlert - Volg je favoriete DJ's</title>
     
+    <!-- Meta tags -->
+    <meta name="description" content="Volg je favoriete DJ's, ontdek nieuwe releases en krijg notificaties wanneer je favoriete artiesten nieuwe muziek uitbrengen.">
+    <meta name="keywords" content="dj, muziek, spotify, releases, notificaties, nieuwe muziek">
+    <meta name="author" content="MusicAlert">
+    
+    <!-- Open Graph / Facebook -->
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="https://musicalert.app/">
+    <meta property="og:title" content="MusicAlert - Volg je favoriete DJ's">
+    <meta property="og:description" content="Volg je favoriete DJ's, ontdek nieuwe releases en krijg notificaties wanneer ze nieuwe muziek uitbrengen.">
+    <meta property="og:image" content="/img/musicalert-og-image.jpg">
+    
+    <!-- Twitter -->
+    <meta property="twitter:card" content="summary_large_image">
+    <meta property="twitter:url" content="https://musicalert.app/">
+    <meta property="twitter:title" content="MusicAlert - Volg je favoriete DJ's">
+    <meta property="twitter:description" content="Volg je favoriete DJ's, ontdek nieuwe releases en krijg notificaties wanneer ze nieuwe muziek uitbrengen.">
+    <meta property="twitter:image" content="/img/musicalert-og-image.jpg">
+    
     <!-- PWA Support -->
     <link rel="manifest" href="/manifest.json">
     <meta name="theme-color" content="#6C4AE6">
@@ -439,6 +458,12 @@
                 </button>
             </div>
         </div>
+    </div>
+    
+    <!-- API Rate Limit Message -->
+    <div id="api-rate-limit-message" class="fixed top-4 right-4 z-50 api-error-message hidden animate__animated animate__fadeInDown">
+        <i class="fas fa-exclamation-triangle"></i>
+        <span>Spotify API limiet bereikt. Sommige functies kunnen tijdelijk niet beschikbaar zijn.</span>
     </div>
     
     <!-- Export/Import Modal -->

@@ -136,6 +136,13 @@ class MusicAlertApp {
             // Get related artists
             const relatedArtists = await api.getRelatedArtists(artistId);
             
+            // Check if we have any data to display
+            if (albums.length === 0) {
+                ui.hideLoading();
+                ui.showMessage('Geen releases gevonden. Dit kan door een API-limiet zijn. Probeer het later nog eens.', 'error');
+                return;
+            }
+            
             // Display the results
             ui.displayLatestTracks(artist, albums, relatedArtists);
             
@@ -145,7 +152,13 @@ class MusicAlertApp {
             ui.showMessage(`Muziek van ${artist.name} geladen`, 'success');
         } catch (error) {
             ui.hideLoading();
-            ui.showError('Er is een fout opgetreden bij het ophalen van de muziek. Probeer het later opnieuw.');
+            
+            // Check if this is an API limit issue
+            if (error.message && (error.message.includes('429') || error.message.toLowerCase().includes('limit'))) {
+                ui.showMessage('Spotify API limiet bereikt. Wacht even en probeer het later nog eens.', 'error');
+            } else {
+                ui.showError('Er is een fout opgetreden bij het ophalen van de muziek. Probeer het later opnieuw.');
+            }
             console.error('Error in getLatestTracks:', error);
         }
     }

@@ -8,6 +8,11 @@ class SpotifyApiService {
         this.clientSecret = 'c7db95f32a9347919b2899d72b4f2bc5';
         this.token = '';
         this.tokenExpiresAt = 0;
+        this.rateLimitedUntil = 0;  // Timestamp when rate limit expires
+        this.retryCount = 0;        // Counter for exponential backoff
+        this.maxRetries = 3;        // Maximum number of retries
+        this.requestQueue = [];     // Queue for pending requests
+        this.isProcessingQueue = false; // Flag to prevent multiple queue processors
     }
 
     /**
@@ -61,31 +66,158 @@ class SpotifyApiService {
     }
 
     /**
+     * Execute API request with rate limiting handling
+     * @param {string} url - The API endpoint URL
+     * @param {Object} options - Fetch options
+     */
+    async executeRequest(url, options = {}) {
+        // Check if we're in a rate limited state
+        if (Date.now() < this.rateLimitedUntil) {
+            const waitTime = Math.ceil((this.rateLimitedUntil - Date.now()) / 1000);
+            console.warn(`Rate limited. Waiting ${waitTime} seconds before retrying.`);
+            
+            // Create a promise that will resolve when the rate limit expires
+            return new Promise((resolve, reject) => {
+                this.addToQueue({ url, options, resolve, reject });
+            });
+        }
+
+        try {
+            // Add the authorization header if not provided
+            if (!options.headers) {
+                options.headers = await this.getHeaders();
+            }
+
+            const response = await fetch(url, options);
+            
+            // Handle rate limiting
+            if (response.status === 429) {
+                const retryAfter = parseInt(response.headers.get('Retry-After') || '30');
+                this.rateLimitedUntil = Date.now() + (retryAfter * 1000);
+                
+                // Notify user about rate limiting
+                ui.showMessage(`Spotify API limiet bereikt. Wacht ${retryAfter} seconden voordat je verder gaat.`, 'error');
+                console.warn(`Rate limited by Spotify API. Retry after ${retryAfter} seconds.`);
+                
+                // Add the request to the queue
+                return new Promise((resolve, reject) => {
+                    this.addToQueue({ url, options, resolve, reject });
+                });
+            }
+            
+            // Reset retry count on successful requests
+            this.retryCount = 0;
+            
+            // Handle 401 errors (token expired)
+            if (response.status === 401) {
+                console.log('Token expired. Getting a new one...');
+                this.token = '';
+                this.tokenExpiresAt = 0;
+                
+                // Retry the request with a new token
+                options.headers = await this.getHeaders();
+                return this.executeRequest(url, options);
+            }
+            
+            // Handle other errors
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({}));
+                throw new Error(`API returned status ${response.status}: ${errorData.error?.message || 'Unknown error'}`);
+            }
+            
+            return response.json();
+        } catch (error) {
+            // Exponential backoff for network errors
+            if (error.name === 'TypeError' && error.message.includes('Failed to fetch')) {
+                if (this.retryCount < this.maxRetries) {
+                    this.retryCount++;
+                    const delay = Math.pow(2, this.retryCount) * 1000; // Exponential backoff
+                    console.warn(`Network error. Retrying in ${delay/1000} seconds... (Attempt ${this.retryCount} of ${this.maxRetries})`);
+                    
+                    await new Promise(resolve => setTimeout(resolve, delay));
+                    return this.executeRequest(url, options);
+                }
+            }
+            
+            throw error;
+        }
+    }
+    
+    /**
+     * Add a request to the queue
+     */
+    addToQueue(request) {
+        this.requestQueue.push(request);
+        
+        // Start processing the queue if not already processing
+        if (!this.isProcessingQueue) {
+            this.processQueue();
+        }
+    }
+    
+    /**
+     * Process the queue of pending requests
+     */
+    async processQueue() {
+        if (this.isProcessingQueue) return;
+        
+        this.isProcessingQueue = true;
+        
+        while (this.requestQueue.length > 0) {
+            // Wait until rate limit expires
+            const waitTime = this.rateLimitedUntil - Date.now();
+            if (waitTime > 0) {
+                await new Promise(resolve => setTimeout(resolve, waitTime + 1000)); // Add 1 second buffer
+            }
+            
+            // Process the next request
+            const { url, options, resolve, reject } = this.requestQueue.shift();
+            
+            try {
+                const result = await this.executeRequest(url, options);
+                resolve(result);
+            } catch (error) {
+                reject(error);
+            }
+        }
+        
+        this.isProcessingQueue = false;
+    }
+
+    /**
      * Search for artists
      */
     async searchArtists(query, limit = 10) {
         try {
             ui.showLoading('Artiesten zoeken...');
             
-            const headers = await this.getHeaders();
-            const response = await fetch(`https://api.spotify.com/v1/search?q=${encodeURIComponent(query)}&type=artist&limit=${limit}`, {
-                headers
-            });
-            
-            const data = await response.json();
-            
-            if (data.error) {
-                throw new Error(`API error: ${data.error.message}`);
-            }
+            const data = await this.executeRequest(
+                `https://api.spotify.com/v1/search?q=${encodeURIComponent(query)}&type=artist&limit=${limit}`
+            );
             
             ui.hideLoading();
             return data.artists.items;
         } catch (error) {
             ui.hideLoading();
-            ui.showError('Er is een fout opgetreden bij het zoeken. Probeer het opnieuw.');
+            if (this.isRateLimitError(error)) {
+                ui.showMessage('Spotify API limiet bereikt. Probeer het later nog eens.', 'error');
+            } else {
+                ui.showError('Er is een fout opgetreden bij het zoeken. Probeer het opnieuw.');
+            }
             console.error('Error searching artists:', error);
-            throw error;
+            return [];
         }
+    }
+    
+    /**
+     * Check if error is a rate limit error
+     */
+    isRateLimitError(error) {
+        return error.message && (
+            error.message.includes('429') || 
+            error.message.toLowerCase().includes('rate limit') ||
+            error.message.toLowerCase().includes('too many requests')
+        );
     }
 
     /**
@@ -93,16 +225,9 @@ class SpotifyApiService {
      */
     async getGenres() {
         try {
-            const headers = await this.getHeaders();
-            const response = await fetch('https://api.spotify.com/v1/recommendations/available-genre-seeds', {
-                headers
-            });
-            
-            const data = await response.json();
-            
-            if (data.error) {
-                throw new Error(`API error: ${data.error.message}`);
-            }
+            const data = await this.executeRequest(
+                'https://api.spotify.com/v1/recommendations/available-genre-seeds'
+            );
             
             return data.genres;
         } catch (error) {
@@ -116,20 +241,16 @@ class SpotifyApiService {
      */
     async getArtist(artistId) {
         try {
-            const headers = await this.getHeaders();
-            const response = await fetch(`https://api.spotify.com/v1/artists/${artistId}`, {
-                headers
-            });
-            
-            const data = await response.json();
-            
-            if (data.error) {
-                throw new Error(`API error: ${data.error.message}`);
-            }
-            
-            return data;
+            return await this.executeRequest(
+                `https://api.spotify.com/v1/artists/${artistId}`
+            );
         } catch (error) {
             console.error('Error fetching artist:', error);
+            
+            if (this.isRateLimitError(error)) {
+                ui.showMessage('Spotify API limiet bereikt. Probeer het later nog eens.', 'error');
+            }
+            
             throw error;
         }
     }
@@ -139,20 +260,18 @@ class SpotifyApiService {
      */
     async getRelatedArtists(artistId) {
         try {
-            const headers = await this.getHeaders();
-            const response = await fetch(`https://api.spotify.com/v1/artists/${artistId}/related-artists`, {
-                headers
-            });
-            
-            const data = await response.json();
-            
-            if (data.error) {
-                throw new Error(`API error: ${data.error.message}`);
-            }
+            const data = await this.executeRequest(
+                `https://api.spotify.com/v1/artists/${artistId}/related-artists`
+            );
             
             return data.artists.slice(0, 5); // Return top 5 related artists
         } catch (error) {
             console.error('Error fetching related artists:', error);
+            
+            if (this.isRateLimitError(error)) {
+                ui.showMessage('Spotify API limiet bereikt voor het ophalen van vergelijkbare artiesten.', 'error');
+            }
+            
             return [];
         }
     }
@@ -164,22 +283,10 @@ class SpotifyApiService {
         try {
             ui.showLoading('Releases ophalen...');
             
-            const headers = await this.getHeaders();
-            
             // First, get both albums and singles
-            const response = await fetch(`https://api.spotify.com/v1/artists/${artistId}/albums?include_groups=single,album&limit=20&market=NL`, {
-                headers
-            });
-            
-            if (!response.ok) {
-                throw new Error(`API returned status ${response.status}`);
-            }
-            
-            const data = await response.json();
-            
-            if (data.error) {
-                throw new Error(`API error: ${data.error.message}`);
-            }
+            const data = await this.executeRequest(
+                `https://api.spotify.com/v1/artists/${artistId}/albums?include_groups=single,album&limit=20&market=NL`
+            );
             
             console.log(`Found ${data.items.length} releases for artist ${artistId}`);
             
@@ -218,30 +325,33 @@ class SpotifyApiService {
             console.log(`After deduplication, showing ${latestReleases.length} releases`);
             
             // Get full album details with tracks
-            const albumsWithTracks = await Promise.all(latestReleases.map(async (album) => {
-                try {
-                    const albumResponse = await fetch(`https://api.spotify.com/v1/albums/${album.id}`, { headers });
-                    
-                    if (!albumResponse.ok) {
-                        console.error(`Error fetching album ${album.id}: ${albumResponse.status}`);
-                        return null;
-                    }
-                    
-                    return await albumResponse.json();
-                } catch (error) {
-                    console.error(`Error processing album ${album.id}:`, error);
-                    return null;
-                }
-            }));
+            const albumPromises = latestReleases.map(album => 
+                this.executeRequest(`https://api.spotify.com/v1/albums/${album.id}`)
+            );
             
-            // Filter out any null values from failed album fetches
-            const validAlbums = albumsWithTracks.filter(album => album !== null);
+            // Use Promise.allSettled to get as many albums as possible even if some fail
+            const albumResults = await Promise.allSettled(albumPromises);
+            
+            // Filter out any failed album fetches and get successful ones
+            const validAlbums = albumResults
+                .filter(result => result.status === 'fulfilled')
+                .map(result => result.value);
+            
+            if (validAlbums.length === 0 && albumPromises.length > 0) {
+                throw new Error('Geen albums konden opgehaald worden');
+            }
             
             ui.hideLoading();
             return validAlbums;
         } catch (error) {
             ui.hideLoading();
-            ui.showError('Er is een fout opgetreden bij het ophalen van releases. Probeer het opnieuw.');
+            
+            if (this.isRateLimitError(error)) {
+                ui.showMessage('Spotify API limiet bereikt. Probeer het later nog eens.', 'error');
+            } else {
+                ui.showError('Er is een fout opgetreden bij het ophalen van releases. Probeer het opnieuw.');
+            }
+            
             console.error('Error fetching artist releases:', error);
             return [];
         }
@@ -260,15 +370,9 @@ class SpotifyApiService {
             // Use up to 5 seed artists
             const seedArtists = artistIds.slice(0, 5).join(',');
             
-            const response = await fetch(`https://api.spotify.com/v1/recommendations?seed_artists=${seedArtists}&limit=${limit}&market=NL`, {
-                headers
-            });
-            
-            const data = await response.json();
-            
-            if (data.error) {
-                throw new Error(`API error: ${data.error.message}`);
-            }
+            const data = await this.executeRequest(
+                `https://api.spotify.com/v1/recommendations?seed_artists=${seedArtists}&limit=${limit}&market=NL`
+            );
             
             // Get full artist details for each recommendation
             const artistsDetails = new Set();
@@ -329,21 +433,9 @@ class SpotifyApiService {
                             await new Promise(resolve => setTimeout(resolve, 100));
                         }
                         
-                        const response = await fetch(`https://api.spotify.com/v1/artists/${artist.id}/albums?include_groups=single,album&limit=10&market=NL`, {
-                            headers
-                        });
-                        
-                        if (!response.ok) {
-                            console.error(`Error fetching albums for artist ${artist.name}: ${response.status}`);
-                            continue;
-                        }
-                        
-                        const data = await response.json();
-                        
-                        if (data.error) {
-                            console.error(`API error for artist ${artist.name}:`, data.error);
-                            continue;
-                        }
+                        const data = await this.executeRequest(
+                            `https://api.spotify.com/v1/artists/${artist.id}/albums?include_groups=single,album&limit=10&market=NL`
+                        );
                         
                         // Find albums released within the lookback period
                         const recentReleases = data.items.filter(album => {
@@ -424,6 +516,18 @@ class SpotifyApiService {
             console.error('Error checking for new releases:', error);
             return [];
         }
+    }
+    
+    /**
+     * Get stats about Spotify API usage
+     */
+    getApiStats() {
+        return {
+            tokenExpiresIn: Math.max(0, Math.floor((this.tokenExpiresAt - Date.now()) / 1000)),
+            rateLimitedFor: Math.max(0, Math.floor((this.rateLimitedUntil - Date.now()) / 1000)),
+            queuedRequests: this.requestQueue.length,
+            isRateLimited: Date.now() < this.rateLimitedUntil
+        };
     }
 }
 
