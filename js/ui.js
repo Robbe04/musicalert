@@ -446,6 +446,9 @@ class UIService {
             html += `
                 <div class="artist-card bg-white rounded-xl overflow-hidden shadow-md hover:shadow-lg transition-all duration-300 flex flex-col animate__animated animate__fadeIn">
                     <div class="h-40 bg-gray-200 overflow-hidden relative">
+                        <div class="is-favorite">
+                            <i class="fas fa-heart"></i> Gevolgd
+                        </div>
                         ${artist.img ? 
                             `<img src="${artist.img}" alt="${artist.name}" class="w-full h-full object-cover">` : 
                             `<div class="w-full h-full flex items-center justify-center bg-gradient-to-r from-primary to-secondary text-white">
@@ -597,8 +600,8 @@ class UIService {
                     <div class="flex items-start">
                         <img src="${album.images[0]?.url || ''}" alt="${album.name}" class="w-20 h-20 mr-4 object-cover rounded-lg">
                         <div class="flex-1">
-                            <div class="flex justify-between items-start">
-                                <div>
+                            <div class="flex md:flex-row flex-col justify-between md:items-start">
+                                <div class="flex-1 min-w-0 pr-2">
                                     <div class="flex flex-wrap items-center gap-x-1 gap-y-0">
                                         <p class="font-bold text-lg">${artist.name}</p>
                                         ${collaborationText ? 
@@ -1055,7 +1058,12 @@ class UIService {
         let html = `
             <div class="animate__animated animate__fadeIn">
                 <div class="flex flex-col md:flex-row items-center md:items-start gap-6 mb-8">
-                    <div class="w-48 h-48 rounded-xl overflow-hidden flex-shrink-0">
+                    <div class="w-48 h-48 rounded-xl overflow-hidden flex-shrink-0 relative">
+                        ${isFavorite ? 
+                            `<div class="is-favorite">
+                                <i class="fas fa-heart"></i> Gevolgd
+                            </div>` : ''
+                        }
                         ${artistImg ? 
                             `<img src="${artistImg}" alt="${artist.name}" class="w-full h-full object-cover">` : 
                             `<div class="w-full h-full flex items-center justify-center bg-gradient-to-r from-primary to-secondary text-white">
@@ -1143,7 +1151,7 @@ class UIService {
                             </a>
                             <button onclick="app.shareRelease('${artist.name}', '${album.name}', '${album.external_urls.spotify}')" 
                                class="bg-blue-500 hover:bg-blue-600 text-white p-2 rounded-lg transition">
-                               <i class="fas fa-share-alt"></i>
+                               <i class="fas fa-share-alt"></i>Delen
                             </button>
                         </div>
                     </div>
@@ -1446,6 +1454,219 @@ class UIService {
                     installButton.classList.add('hidden');
                 }
             }
+        }
+    }
+
+    /**
+     * Display statistics modal
+     */
+    displayStatsModal(stats) {
+        const modal = document.getElementById('stats-modal');
+        const topArtistsList = document.getElementById('top-artists-list');
+        const recentActivityList = document.getElementById('recent-activity-list');
+        const totalPlaysElement = document.getElementById('total-plays');
+        
+        if (!modal || !topArtistsList || !recentActivityList || !totalPlaysElement) return;
+        
+        // Display top artists
+        let topArtistsHtml = '';
+        if (stats.topArtists.length > 0) {
+            stats.topArtists.forEach((artist, index) => {
+                topArtistsHtml += `
+                    <div class="stats-item flex items-center justify-between p-2">
+                        <div class="flex items-center">
+                            <span class="text-primary font-bold mr-2">${index + 1}.</span>
+                            <span>${artist.name}</span>
+                        </div>
+                        <span class="bg-primary bg-opacity-20 text-primary dark:text-primary-light px-2 py-1 rounded-full text-sm">
+                            ${artist.count} keer
+                        </span>
+                    </div>
+                `;
+            });
+        } else {
+            topArtistsHtml = '<p class="text-center text-gray-500 py-2">Nog geen luistergeschiedenis</p>';
+        }
+        topArtistsList.innerHTML = topArtistsHtml;
+        
+        // Display recent activity
+        let recentActivityHtml = '';
+        if (stats.recentActivity.length > 0) {
+            stats.recentActivity.forEach(activity => {
+                const date = new Date(activity.timestamp);
+                const formattedDate = date.toLocaleString('nl-NL', { 
+                    day: '2-digit', 
+                    month: '2-digit', 
+                    hour: '2-digit', 
+                    minute: '2-digit' 
+                });
+                
+                recentActivityHtml += `
+                    <div class="stats-item p-2">
+                        <div class="flex justify-between items-start">
+                            <div>
+                                <p class="font-medium">${activity.trackName}</p>
+                                <p class="text-sm text-gray-600 dark:text-gray-400">${activity.artistName} • ${activity.albumName}</p>
+                            </div>
+                            <span class="text-xs text-gray-500">${formattedDate}</span>
+                        </div>
+                    </div>
+                `;
+            });
+        } else {
+            recentActivityHtml = '<p class="text-center text-gray-500 py-2">Nog geen luistergeschiedenis</p>';
+        }
+        recentActivityList.innerHTML = recentActivityHtml;
+        
+        // Set total plays
+        totalPlaysElement.textContent = stats.totalPlays;
+        
+        // Show modal
+        modal.classList.remove('hidden');
+    }
+    
+    /**
+     * Hide statistics modal
+     */
+    hideStatsModal() {
+        const modal = document.getElementById('stats-modal');
+        if (modal) {
+            modal.classList.add('hidden');
+        }
+    }
+
+    /**
+     * Display pre-releases
+     */
+    displayPreReleases(preReleases) {
+        const container = document.getElementById('pre-releases');
+        container.innerHTML = '';
+        
+        console.log(`Displaying ${preReleases?.length || 0} pre-releases`);
+        
+        if (!preReleases || preReleases.length === 0) {
+            container.innerHTML = `
+                <div class="col-span-full text-center py-8">
+                    <div class="text-gray-400 mb-4">
+                        <i class="fas fa-calendar-day text-5xl"></i>
+                    </div>
+                    <p class="text-gray-500">Geen aankomende releases gevonden</p>
+                    <p class="text-gray-500 text-sm mt-2">Dit kan worden veroorzaakt door API-beperkingen</p>
+                    <p class="text-gray-500 text-xs mt-4">
+                        De Spotify API beperkt het aantal verzoeken. 
+                        Probeer het later opnieuw als je veel artiesten volgt.
+                    </p>
+                    <button onclick="app.loadPreReleases()" class="mt-4 bg-primary hover:bg-primary-dark text-white px-4 py-2 rounded-lg transition">
+                        Opnieuw proberen
+                    </button>
+                </div>
+            `;
+            return;
+        }
+        
+        // Sort by release date (earliest first)
+        preReleases.sort((a, b) => {
+            if (!a.releaseDate) return 1;
+            if (!b.releaseDate) return -1;
+            return a.releaseDate - b.releaseDate;
+        });
+        
+        // Add a note about API limitations
+        const noteElement = document.createElement('div');
+        noteElement.className = 'col-span-full mb-4 p-3 bg-blue-50 text-blue-800 rounded-lg';
+        noteElement.innerHTML = `
+            <p class="text-sm flex items-center">
+                <i class="fas fa-info-circle mr-2"></i>
+                Door API-beperkingen worden alleen releases van de eerste 10 artiesten weergegeven.
+            </p>
+        `;
+        container.appendChild(noteElement);
+        
+        for (const release of preReleases) {
+            // Skip invalid releases
+            if (!release.album || !release.artist || !release.releaseDate) {
+                console.warn('Invalid release data:', release);
+                continue;
+            }
+            
+            // Calculate days until release
+            const daysUntilRelease = Math.ceil((release.releaseDate - new Date()) / (1000 * 60 * 60 * 24));
+            
+            // Format the date for display
+            const releaseDateFormatted = release.releaseDate.toLocaleDateString('nl-NL', { 
+                day: 'numeric', 
+                month: 'long', 
+                year: 'numeric' 
+            });
+            
+            const card = document.createElement('div');
+            card.className = 'bg-white rounded-lg shadow-md overflow-hidden transition-all duration-300 hover:shadow-lg flex flex-col md:flex-row mb-4';
+            
+            let artistJson = '';
+            try {
+                artistJson = JSON.stringify(release.artist.genres || []).replace(/'/g, "\\'");
+            } catch (e) {
+                artistJson = '[]';
+            }
+            
+            card.innerHTML = `
+                <div class="md:w-1/4 flex-shrink-0">
+                    <img src="${release.album.images[0]?.url || 'img/placeholder-album.png'}" 
+                        alt="${release.album.name}" class="w-full h-full object-cover">
+                </div>
+                <div class="p-4 md:w-3/4 flex flex-col">
+                    <div class="flex justify-between items-start">
+                        <div>
+                            <h3 class="font-bold text-lg">${release.album.name}</h3>
+                            <p class="text-primary">${release.artist.name}</p>
+                        </div>
+                        <div class="text-right">
+                            <span class="bg-primary bg-opacity-20 text-primary px-2 py-1 rounded-full text-sm font-medium">
+                                ${daysUntilRelease === 0 ? 'Vandaag' : (daysUntilRelease === 1 ? 'Morgen' : `Nog ${daysUntilRelease} dagen`)}
+                            </span>
+                            <p class="text-sm text-gray-500 mt-1">${releaseDateFormatted}</p>
+                        </div>
+                    </div>
+                    
+                    <div class="mt-2 mb-3">
+                        <span class="text-sm bg-gray-100 text-gray-700 px-2 py-1 rounded-full">
+                            ${release.album.album_type.charAt(0).toUpperCase() + release.album.album_type.slice(1)}
+                        </span>
+                        <span class="text-sm bg-gray-100 text-gray-700 px-2 py-1 rounded-full ml-2">
+                            ${release.album.total_tracks} tracks
+                        </span>
+                    </div>
+                    
+                    <div class="mt-auto flex justify-between items-center">
+                        <button onclick="app.toggleFavorite('${release.artist.id}', '${release.artist.name.replace(/'/g, "\\'")}', '${release.artist.img?.replace(/'/g, "\\'")}', ${artistJson})" class="text-gray-600 hover:text-red-500 transition-colors">
+                            <i class="fas fa-heart mr-1 ${this.isArtistInFavorites(release.artist.id) ? 'text-red-500' : ''}"></i>
+                            <span>${this.isArtistInFavorites(release.artist.id) ? 'Gevolgd' : 'Volgen'}</span>
+                        </button>
+                        
+                        <div>
+                            ${release.album.external_urls?.spotify ? `
+                                <a href="${release.album.external_urls.spotify}" target="_blank" class="bg-primary hover:bg-primary-dark text-white px-3 py-1 rounded-lg text-sm transition">
+                                    <i class="fab fa-spotify mr-1"></i>Pre-save
+                                </a>
+                            ` : ''}
+                            
+                            <button onclick="app.shareRelease('${release.artist.name.replace(/'/g, "\\'")}', '${release.album.name.replace(/'/g, "\\'")}', '${release.album.external_urls?.spotify || ''}')" class="ml-2 bg-gray-200 hover:bg-gray-300 text-gray-700 px-3 py-1 rounded-lg text-sm transition">
+                                <i class="fas fa-share-alt mr-1"></i>Delen
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            container.appendChild(card);
+        }
+        
+        // Add debug info in development mode
+        if (location.hostname === "localhost" || location.hostname === "127.0.0.1") {
+            const debugElement = document.createElement('div');
+            debugElement.className = 'mt-4 p-2 bg-gray-100 rounded text-xs';
+            debugElement.innerHTML = `<p class="text-gray-500">Debug info: Loaded ${preReleases.length} upcoming releases</p>`;
+            container.appendChild(debugElement);
         }
     }
 }
