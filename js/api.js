@@ -371,75 +371,107 @@ class SpotifyApiService {
      * Get upcoming pre-releases that are not yet released
      * @param {Array} favorites - List of favorite artists
      * @param {number} limit - Maximum number of pre-releases to fetch
+     * @param {boolean} highPriority - Whether this is a high priority request
      */
-    async getPreReleases(favorites, limit = 10) {
+    async getPreReleases(favorites, limit = 10, highPriority = false) {
         try {
             if (!favorites || !favorites.length) {
                 console.log("No favorites provided");
                 return [];
             }
             
-            console.log(`Getting pre-releases for ${favorites.length} favorite artists`);
+            console.log(`Getting pre-releases for ${favorites.length} favorite artists${highPriority ? ' (high priority)' : ''}`);
             const headers = await this.getHeaders();
             let preReleases = [];
-            const now = new Date();
             const processedAlbumIds = new Set(); // Track album IDs to prevent duplicates
             
-            // Try to get data from cache first
-            const cacheKey = 'pre-releases-cache';
-            const cacheExpiryKey = 'pre-releases-cache-expiry';
-            const cachedData = localStorage.getItem(cacheKey);
-            const cacheExpiry = localStorage.getItem(cacheExpiryKey);
-            
-            // Use cache if it exists and is less than 6 hours old
-            if (cachedData && cacheExpiry && parseInt(cacheExpiry) > Date.now()) {
-                console.log('Using cached pre-releases data');
-                try {
-                    const parsedData = JSON.parse(cachedData);
-                    return parsedData;
-                } catch (e) {
-                    console.error('Error parsing cached data:', e);
-                    // Continue with fresh data if cache parsing fails
+            // Try to get data from cache first (skip if force refresh requested)
+            const forceRefresh = new URLSearchParams(window.location.search).has('refresh');
+            if (!forceRefresh) {
+                const cacheKey = 'pre-releases-cache';
+                const cacheExpiryKey = 'pre-releases-cache-expiry';
+                const cachedData = localStorage.getItem(cacheKey);
+                const cacheExpiry = localStorage.getItem(cacheExpiryKey);
+                
+                // Use cache if it exists and is less than 6 hours old
+                if (cachedData && cacheExpiry && parseInt(cacheExpiry) > Date.now()) {
+                    console.log('Using cached pre-releases data');
+                    try {
+                        const parsedData = JSON.parse(cachedData);
+                        
+                        // BELANGRIJKE FIX: Filter de cache om releases te verwijderen die al zijn uitgekomen
+                        const now = new Date();
+                        now.setHours(0, 0, 0, 0);  // Set to start of today for consistent comparison
+                        
+                        const filteredReleases = parsedData.filter(release => {
+                            // Parse release date if it's a string
+                            let releaseDate = release.releaseDate;
+                            if (typeof releaseDate === 'string') {
+                                releaseDate = new Date(releaseDate);
+                            }
+                            
+                            // Keep only future releases (today and beyond)
+                            return releaseDate >= now;
+                        });
+                        
+                        console.log(`Filtered ${parsedData.length - filteredReleases.length} already released items from cache`);
+                        
+                        if (filteredReleases.length > 0) {
+                            return filteredReleases;
+                        }
+                    } catch (e) {
+                        console.error('Error parsing cached data:', e);
+                        // Continue with fresh data if cache parsing fails
+                    }
                 }
             }
             
             // To avoid rate limiting, only process a subset of artists
-            const maxArtistsToProcess = 10; // Process only 10 artists at a time
+            // If high priority, process more artists
+            const maxArtistsToProcess = highPriority ? 15 : 8; // Process more artists if high priority
             const artistsToProcess = favorites.slice(0, maxArtistsToProcess);
             
             // Show a message that we're limiting the request due to API constraints
-            ui.showMessage(`API-limiet bereikt: Alleen de eerste ${maxArtistsToProcess} artiesten worden gecontroleerd op aankomende releases`, 'info');
+            if (favorites.length > maxArtistsToProcess) {
+                ui.showMessage(`API-limiet: Alleen de eerste ${maxArtistsToProcess} artiesten worden gecontroleerd op aankomende releases`, 'info');
+            }
             
-            // Process artists with delay between requests
+            // Get today's date for filtering
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);  // Start of today
+            
+            // Process artists with adjusted delay between requests (shorter if high priority)
+            const requestDelay = highPriority ? 200 : 350; // milliseconds
+            
             for (let i = 0; i < artistsToProcess.length; i++) {
                 const artist = artistsToProcess[i];
                 
                 try {
-                    console.log(`Checking releases for: ${artist.name}`);
+                    console.log(`Checking releases for: ${artist.name} (${i+1}/${artistsToProcess.length})`);
                     
                     // Add delay between requests to avoid rate limiting
                     if (i > 0) {
-                        await new Promise(resolve => setTimeout(resolve, 300)); // 300ms delay
+                        await new Promise(resolve => setTimeout(resolve, requestDelay));
                     }
                     
                     // Get albums for this artist
                     const response = await this.fetchWithRetry(
                         `https://api.spotify.com/v1/artists/${artist.id}/albums?include_groups=album,single&market=NL&limit=5`,
                         { headers },
-                        3 // Max retries
+                        highPriority ? 2 : 1 // More retries if high priority
                     );
                     
                     if (!response.ok) {
                         if (response.status === 429) {
                             // Get retry-after header
                             const retryAfter = response.headers.get('Retry-After') || '5';
-                            console.log(`Rate limited for artist ${artist.id}. Retry after ${retryAfter}s`);
+                            console.log(`Rate limited for artist ${artist.name}. Retry after ${retryAfter}s`);
                             
                             // Skip this artist for now
                             continue;
                         }
                         
-                        console.error(`API error for artist ${artist.id}: ${response.status}`);
+                        console.error(`API error for artist ${artist.name}: ${response.status}`);
                         continue;
                     }
                     
@@ -466,17 +498,17 @@ class SpotifyApiService {
                             } else {
                                 releaseDate = new Date(album.release_date);
                             }
+                            
+                            // Set to midnight for consistent comparison
+                            releaseDate.setHours(0, 0, 0, 0);
                         } catch (e) {
                             console.error(`Error parsing date: ${album.release_date}`, e);
                             continue;
                         }
                         
-                        // Check if this is a future release (tomorrow or later to avoid timezone issues)
-                        const tomorrow = new Date();
-                        tomorrow.setDate(tomorrow.getDate() + 1);
-                        tomorrow.setHours(0, 0, 0, 0);
-                        
-                        if (releaseDate >= tomorrow) {
+                        // BELANGRIJKE FIX: Check if this is a future release (today or later)
+                        // This ensures we don't show already released albums
+                        if (releaseDate >= today) {
                             console.log(`Found upcoming release: ${album.name} by ${artist.name}, date: ${releaseDate.toISOString()}`);
                             
                             preReleases.push({
@@ -500,6 +532,7 @@ class SpotifyApiService {
             // Get detailed information for each upcoming release
             if (preReleases.length > 0) {
                 const detailedReleases = [];
+                const detailDelay = highPriority ? 150 : 300; // milliseconds
                 
                 // Process releases with delay between requests
                 for (let i = 0; i < Math.min(preReleases.length, limit); i++) {
@@ -508,19 +541,19 @@ class SpotifyApiService {
                     try {
                         // Add delay between requests
                         if (i > 0) {
-                            await new Promise(resolve => setTimeout(resolve, 300));
+                            await new Promise(resolve => setTimeout(resolve, detailDelay));
                         }
                         
                         // Get full album details
                         const albumResponse = await this.fetchWithRetry(
                             `https://api.spotify.com/v1/albums/${release.album.id}`,
                             { headers },
-                            3 // Max retries
+                            highPriority ? 2 : 1 // More retries if high priority
                         );
                         
                         if (!albumResponse.ok) {
                             if (albumResponse.status === 429) {
-                                console.log(`Rate limited for album ${release.album.id}. Skipping detailed info.`);
+                                console.log(`Rate limited for album ${release.album.name}. Skipping detailed info.`);
                                 detailedReleases.push(release); // Use basic info
                                 continue;
                             }
@@ -546,8 +579,8 @@ class SpotifyApiService {
                 
                 // Cache the results for 6 hours
                 try {
-                    localStorage.setItem(cacheKey, JSON.stringify(detailedReleases));
-                    localStorage.setItem(cacheExpiryKey, (Date.now() + 6 * 60 * 60 * 1000).toString()); // 6 hours
+                    localStorage.setItem('pre-releases-cache', JSON.stringify(detailedReleases));
+                    localStorage.setItem('pre-releases-cache-expiry', (Date.now() + 6 * 60 * 60 * 1000).toString()); // 6 hours
                 } catch (e) {
                     console.error('Error saving to cache:', e);
                 }
@@ -639,7 +672,8 @@ class SpotifyApiService {
                         
                         return {
                             ...track,
-                            audioFeatures: audioFeatures
+                            audioFeatures: audioFeatures,
+                            duration: this.formatDuration(track.duration_ms) // Include formatted duration
                         };
                     } catch (error) {
                         console.error('Error fetching audio features:', error);
@@ -655,6 +689,53 @@ class SpotifyApiService {
             console.error('Error fetching track recommendations:', error);
             return [];
         }
+    }
+
+    /**
+     * Get a specific album with all tracks
+     */
+    async getAlbum(albumId) {
+        if (!albumId) throw new Error('Album ID is required');
+        
+        try {
+            const token = await this.getToken();
+            
+            const response = await fetch(`https://api.spotify.com/v1/albums/${albumId}`, {
+                headers: {
+                    'Authorization': `Bearer ${token}`
+                }
+            });
+            
+            if (!response.ok) {
+                throw new Error(`Error fetching album: ${response.status}`);
+            }
+            
+            return await response.json();
+        } catch (error) {
+            console.error('Error in getAlbum:', error);
+            throw error;
+        }
+    }
+    
+    /**
+     * Format track duration from milliseconds to MM:SS format
+     * @param {number} ms - Duration in milliseconds
+     * @returns {string} Formatted duration as MM:SS
+     */
+    formatDuration(ms) {
+        if (!ms || isNaN(ms)) return "0:00";
+        const minutes = Math.floor(ms / 60000);
+        const seconds = Math.floor((ms % 60000) / 1000);
+        return `${minutes}:${seconds < 10 ? '0' : ''}${seconds}`;
+    }
+    
+    /**
+     * Check if an album has multiple tracks
+     * @param {Object} album - Album object from Spotify API
+     * @returns {boolean} True if album has multiple tracks
+     */
+    hasMultipleTracks(album) {
+        return album && album.total_tracks && album.total_tracks > 1;
     }
 }
 

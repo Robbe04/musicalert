@@ -72,21 +72,43 @@ class MusicAlertApp {
         // Initialize sorting and filtering
         ui.initializeSortingAndFiltering();
         
-        // Initialize notifications
-        if (await notifications.init()) {
-            this.notificationsEnabled = await notifications.updateSubscriptionStatus();
-            ui.updateNotificationToggle(this.notificationsEnabled);
-        }
+        // Initialize notifications (niet direct API-aanroepen doen)
+        const notificationsInitialized = await notifications.init();
         
-        // Display favorites and check for new releases
+        // Display favorites first (dit gebruikt geen API)
         this.displayFavorites();
-        this.checkNewReleases();
         
-        // Load recommendations based on favorites
+        // Load nieuwe releases EERST als we favorieten hebben
         if (this.favorites.length) {
-            this.loadRecommendations();
-            this.loadTrackRecommendations();
-            this.loadPreReleases();
+            try {
+                // Switch to notifications tab to show loading immediately (nieuwe releases)
+                this.switchTab('notifications');
+                
+                // Check for new releases first with highest priority
+                await this.checkNewReleases();
+                
+                // Vertraag andere API-intensieve operaties
+                setTimeout(async () => {
+                    // Then load pre-releases (secondary priority)
+                    await this.loadPreReleases(true);
+                    
+                    // Complete notifications initialization
+                    if (notificationsInitialized) {
+                        this.notificationsEnabled = await notifications.updateSubscriptionStatus();
+                        ui.updateNotificationToggle(this.notificationsEnabled);
+                    }
+                    
+                    // Vertraag de minst belangrijke API-aanroepen nog verder
+                    setTimeout(async () => {
+                        // Load recommendations (lowest priority)
+                        await this.loadRecommendations();
+                        await this.loadTrackRecommendations();
+                    }, 2000); // wacht 2 seconden voor de minst belangrijke API-aanroepen
+                }, 1000); // wacht 1 seconde voor secundaire prioriteitsaanroepen
+            } catch (error) {
+                console.error('Error in initialization sequence:', error);
+                ui.showMessage('Er is een fout opgetreden bij het initialiseren van de app', 'error');
+            }
         }
         
         // Setup offline detection
@@ -327,10 +349,10 @@ class MusicAlertApp {
                 if (container) {
                     container.innerHTML = `
                         <div class="text-center py-8">
-                            <div class="text-gray-400 mb-4">
+                            <div class="text-light-400 mb-4">
                                 <i class="fas fa-spinner fa-spin text-3xl loading-spinner"></i>
                             </div>
-                            <p class="text-gray-500">Nieuwe releases laden...</p>
+                            <p class="text-light-500">Nieuwe releases laden...</p>
                         </div>
                     `;
                 }
@@ -452,8 +474,9 @@ class MusicAlertApp {
 
     /**
      * Load pre-releases for favorite artists
+     * @param {boolean} highPriority - Whether to load with high priority
      */
-    async loadPreReleases() {
+    async loadPreReleases(highPriority = false) {
         if (!this.favorites.length) {
             ui.displayPreReleases([]);
             return;
@@ -477,15 +500,29 @@ class MusicAlertApp {
             }
             
             console.log('Fetching pre-releases...');
-            const preReleases = await api.getPreReleases(this.favorites);
+            
+            // Clear cache if forcing refresh
+            const forceRefresh = new URLSearchParams(window.location.search).has('refresh');
+            if (forceRefresh) {
+                localStorage.removeItem('pre-releases-cache');
+                localStorage.removeItem('pre-releases-cache-expiry');
+                console.log('Forcing refresh of pre-releases cache');
+            }
+            
+            // Pass high priority flag to API call
+            const preReleases = await api.getPreReleases(this.favorites, 10, highPriority);
             console.log(`Received ${preReleases?.length || 0} pre-releases from API`);
             
             if (preReleases?.length === 0) {
                 ui.showMessage('Geen aankomende releases gevonden of API-limiet bereikt. Probeer het later opnieuw.', 'info');
+            } else if (preReleases?.length > 0) {
+                ui.showMessage(`${preReleases.length} aankomende releases gevonden`, 'success');
             }
             
             ui.displayPreReleases(preReleases);
             ui.hideLoading();
+            
+            return preReleases;
         } catch (error) {
             ui.hideLoading();
             console.error('Error loading pre-releases:', error);
@@ -1009,12 +1046,14 @@ class MusicAlertApp {
                 const albumName = button.dataset.albumName;
                 const albumId = button.dataset.albumId;
                 const albumImage = button.dataset.albumImage;
+                const trackDuration = button.dataset.trackDuration;
                 
                 // Create track object to pass to the preview player
                 const track = {
                     id: trackId,
                     name: trackName,
                     preview_url: previewUrl,
+                    duration_ms: trackDuration,
                     artists: [{ id: artistId, name: artistName }],
                     album: {
                         id: albumId,
