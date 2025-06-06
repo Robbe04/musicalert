@@ -336,9 +336,18 @@ class MusicAlertApp {
      * Display favorites
      */
     displayFavorites() {
+        // Debug logging
+        console.log('displayFavorites called with', this.favorites.length, 'favorites');
+        console.log('gevolgdeDJsUI available:', !!window.gevolgdeDJsUI);
+        
         // Controleer of de module geladen is
         if (window.gevolgdeDJsUI) {
-            window.gevolgdeDJsUI.displayFavorites(this.favorites);
+            try {
+                window.gevolgdeDJsUI.displayFavorites(this.favorites);
+            } catch (error) {
+                console.error('Error in gevolgdeDJsUI.displayFavorites:', error);
+                this._fallbackDisplayFavorites();
+            }
         } else {
             console.error('gevolgdeDJsUI module not loaded');
             // Fallback: toon een simpele lijst
@@ -404,10 +413,18 @@ class MusicAlertApp {
      * @param {boolean} background - Whether this is a background check
      */
     async checkNewReleases(background = false) {
+        // Debug logging
+        console.log('checkNewReleases called, background:', background);
+        console.log('nieuweReleasesUI available:', !!window.nieuweReleasesUI);
+        
         if (!this.favorites.length) {
             // Controleer of de module geladen is
             if (window.nieuweReleasesUI) {
-                window.nieuweReleasesUI.displayNotifications([]);
+                try {
+                    window.nieuweReleasesUI.displayNotifications([]);
+                } catch (error) {
+                    console.error('Error in nieuweReleasesUI.displayNotifications:', error);
+                }
             } else {
                 console.error('nieuweReleasesUI module not loaded');
             }
@@ -416,17 +433,13 @@ class MusicAlertApp {
         
         try {
             if (!background) {
-                // Show loading indicator in the notifications container
-                const container = document.getElementById('notifications');
-                if (container) {
-                    container.innerHTML = `
-                        <div class="text-center py-8">
-                            <div class="text-light-400 mb-4">
-                                <i class="fas fa-spinner fa-spin text-3xl loading-spinner"></i>
-                            </div>
-                            <p class="text-light-500">Nieuwe releases laden...</p>
-                        </div>
-                    `;
+                // Show loading skeletons instead of basic loading
+                if (window.nieuweReleasesUI) {
+                    try {
+                        window.nieuweReleasesUI.showLoadingSkeletons();
+                    } catch (error) {
+                        console.error('Error in showLoadingSkeletons:', error);
+                    }
                 }
                 ui.showLoading('Nieuwe releases controleren...');
             }
@@ -444,11 +457,20 @@ class MusicAlertApp {
                 console.log(`Displaying ${newReleases.length} new releases in the UI`);
                 // Controleer of de module geladen is
                 if (window.nieuweReleasesUI) {
-                    window.nieuweReleasesUI.displayNotifications(newReleases);
+                    try {
+                        window.nieuweReleasesUI.displayNotifications(newReleases);
+                    } catch (error) {
+                        console.error('Error in nieuweReleasesUI.displayNotifications:', error);
+                    }
                 } else {
                     console.error('nieuweReleasesUI module not loaded');
                 }
                 ui.hideLoading();
+                
+                // Show success notification
+                if (newReleases.length > 0) {
+                    ui.showMessage(`${newReleases.length} nieuwe release${newReleases.length === 1 ? '' : 's'} gevonden!`, 'success');
+                }
             }
             
             return newReleases;

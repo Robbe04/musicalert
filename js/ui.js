@@ -704,6 +704,190 @@ class UIService {
         const themeText = theme === 'system' ? 'systeemvoorkeur' : theme === 'dark' ? 'donker' : 'licht';
         this.showMessage(`Thema gewijzigd naar ${themeText}`, 'success');
     }
+
+    /**
+     * Toon alle tracks van een album in een popup
+     * @param {string} albumId - Album ID
+     * @param {string} albumName - Album naam
+     * @param {string} artistName - Artiest naam
+     */
+    async showAlbumTracks(albumId, albumName, artistName) {
+        try {
+            ui.showLoading('Album tracks laden...');
+            
+            // Get album details
+            const album = await api.getAlbum(albumId);
+            
+            ui.hideLoading();
+            
+            // Create modal
+            const modal = this._createAlbumTracksModal(album, artistName);
+            document.body.appendChild(modal);
+            
+            // Show modal
+            setTimeout(() => {
+                modal.classList.remove('opacity-0');
+                modal.classList.add('opacity-100');
+            }, 10);
+            
+            // Setup close handlers
+            this._setupAlbumModalCloseHandlers(modal);
+            
+        } catch (error) {
+            ui.hideLoading();
+            console.error('Error loading album tracks:', error);
+            ui.showMessage('Fout bij het laden van album tracks', 'error');
+        }
+    }
+
+    /**
+     * Maak album tracks modal
+     * @param {Object} album - Album object
+     * @param {string} artistName - Artist name
+     * @returns {HTMLElement} Modal element
+     * @private
+     */
+    _createAlbumTracksModal(album, artistName) {
+        const modal = document.createElement('div');
+        modal.id = 'album-tracks-modal';
+        modal.className = 'fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 opacity-0 transition-opacity duration-300';
+        
+        const albumImg = album.images.length ? album.images[0].url : '';
+        const releaseDate = new Date(album.release_date).toLocaleDateString('nl-NL');
+        
+        modal.innerHTML = `
+            <div class="bg-white rounded-xl max-w-2xl w-full max-h-[90vh] overflow-hidden animate__animated animate__fadeInUp">
+                <!-- Header -->
+                <div class="bg-gradient-to-r from-primary to-secondary text-white p-6">
+                    <div class="flex items-start gap-4">
+                        <div class="w-20 h-20 rounded-lg overflow-hidden flex-shrink-0 bg-white bg-opacity-20">
+                            ${albumImg ? 
+                                `<img src="${albumImg}" alt="${album.name}" class="w-full h-full object-cover">` : 
+                                `<div class="w-full h-full flex items-center justify-center">
+                                    <i class="fas fa-music text-2xl"></i>
+                                </div>`
+                            }
+                        </div>
+                        <div class="flex-1 min-w-0">
+                            <h2 class="text-xl font-bold mb-1 truncate">${album.name}</h2>
+                            <p class="text-white text-opacity-90 mb-2">${artistName}</p>
+                            <div class="flex items-center gap-4 text-sm text-white text-opacity-75">
+                                <span><i class="fas fa-calendar mr-1"></i>${releaseDate}</span>
+                                <span><i class="fas fa-music mr-1"></i>${album.total_tracks} tracks</span>
+                                <span class="capitalize">${album.album_type}</span>
+                            </div>
+                        </div>
+                        <button onclick="this.closest('#album-tracks-modal').remove()" 
+                            class="text-white hover:text-gray-200 transition p-1">
+                            <i class="fas fa-times text-xl"></i>
+                        </button>
+                    </div>
+                </div>
+                
+                <!-- Tracks List -->
+                <div class="overflow-y-auto max-h-96 p-4">
+                    <div class="space-y-2">
+                        ${album.tracks.items.map((track, index) => this._generateTrackItem(track, index + 1, album)).join('')}
+                    </div>
+                </div>
+                
+                <!-- Footer -->
+                <div class="bg-gray-50 px-6 py-4 flex gap-3">
+                    <a href="${album.external_urls.spotify}" target="_blank" 
+                       class="flex-1 text-center bg-green-600 hover:bg-green-700 text-white py-2 rounded-lg transition">
+                       <i class="fab fa-spotify mr-2"></i>Open in Spotify
+                    </a>
+                    <button onclick="app.shareRelease('${artistName}', '${album.name}', '${album.external_urls.spotify}')" 
+                       class="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg transition">
+                       <i class="fas fa-share-alt mr-2"></i>Delen
+                    </button>
+                    <button onclick="this.closest('#album-tracks-modal').remove()" 
+                       class="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded-lg transition">
+                       Sluiten
+                    </button>
+                </div>
+            </div>
+        `;
+        
+        return modal;
+    }
+
+    /**
+     * Genereer track item voor album modal
+     * @param {Object} track - Track object
+     * @param {number} trackNumber - Track number
+     * @param {Object} album - Album object
+     * @returns {string} HTML string
+     * @private
+     */
+    _generateTrackItem(track, trackNumber, album) {
+        const duration = this.formatDuration(track.duration_ms);
+        const hasPreview = track.preview_url;
+        const isExplicit = track.explicit;
+        
+        return `
+            <div class="track-item flex items-center gap-3 p-3 rounded-lg hover:bg-gray-50 transition group">
+                <div class="flex-shrink-0 w-8 text-center">
+                    ${hasPreview ? `
+                        <button onclick="this.playTrackPreview('${track.preview_url}', this)" 
+                            class="play-btn w-8 h-8 rounded-full bg-primary text-white hover:bg-primary-dark transition opacity-0 group-hover:opacity-100">
+                            <i class="fas fa-play text-xs"></i>
+                        </button>
+                        <span class="track-number text-gray-500 text-sm group-hover:hidden">${trackNumber}</span>
+                    ` : `
+                        <span class="track-number text-gray-500 text-sm">${trackNumber}</span>
+                    `}
+                </div>
+                
+                <div class="flex-1 min-w-0">
+                    <h4 class="font-medium truncate">${track.name}</h4>
+                    <p class="text-sm text-gray-500 truncate">
+                        ${track.artists.map(artist => artist.name).join(', ')}
+                        ${isExplicit ? '<span class="ml-2 text-xs bg-gray-200 text-gray-800 px-1 rounded">E</span>' : ''}
+                    </p>
+                </div>
+                
+                <div class="flex items-center gap-2 text-sm text-gray-500">
+                    ${hasPreview ? `
+                        <i class="fas fa-volume-up text-xs" title="Preview beschikbaar"></i>
+                    ` : ''}
+                    <span>${duration}</span>
+                </div>
+                
+                <div class="flex gap-1 opacity-0 group-hover:opacity-100 transition">
+                    <a href="${track.external_urls.spotify}" target="_blank" 
+                       class="text-green-600 hover:text-green-700 p-1" title="Open in Spotify">
+                        <i class="fab fa-spotify text-sm"></i>
+                    </a>
+                </div>
+            </div>
+        `;
+    }
+
+    /**
+     * Setup close handlers voor album modal
+     * @param {HTMLElement} modal - Modal element
+     * @private
+     */
+    _setupAlbumModalCloseHandlers(modal) {
+        // Close on background click
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal) {
+                modal.classList.add('opacity-0');
+                setTimeout(() => modal.remove(), 300);
+            }
+        });
+        
+        // Close on Escape key
+        const handleKeyPress = (e) => {
+            if (e.key === 'Escape') {
+                modal.classList.add('opacity-0');
+                setTimeout(() => modal.remove(), 300);
+                document.removeEventListener('keydown', handleKeyPress);
+            }
+        };
+        document.addEventListener('keydown', handleKeyPress);
+    }
 }
 
 // Initialiseer UI service

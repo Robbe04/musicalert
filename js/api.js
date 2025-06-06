@@ -353,10 +353,15 @@ class SpotifyApiService {
                     newReleases.push({
                         artist: primaryArtist,
                         album: album,
-                        collaborationInfo: collaborationInfo
+                        collaborationInfo: collaborationInfo,
+                        releaseDate: new Date(album.release_date), // Add parsed release date for sorting
+                        releaseDateMs: new Date(album.release_date).getTime() // Add timestamp for easy sorting
                     });
                 }
             }
+            
+            // Sort by release date (newest first)
+            newReleases.sort((a, b) => b.releaseDateMs - a.releaseDateMs);
             
             ui.hideLoading();
             return newReleases;

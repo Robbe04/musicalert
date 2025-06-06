@@ -1,6 +1,6 @@
 /**
  * Nieuwe Releases UI Module
- * Behandelt het weergeven van nieuwe muziekreleases van gevolgde artiesten
+ * Behandelt het weergeven van nieuwe releases van gevolgde artiesten
  */
 class NieuweReleasesUI {
     constructor() {
@@ -8,157 +8,121 @@ class NieuweReleasesUI {
     }
 
     /**
-     * Toon nieuwe releases van gevolgde artiesten
-     * @param {Array} releases - Array van nieuwe releases
+     * Toon loading skeletons
      */
-    displayNotifications(releases) {
-        this.releases = releases;
+    showLoadingSkeletons() {
         const container = document.getElementById('notifications');
-        const filterContainer = document.getElementById('notifications-filter-container');
+        if (!container) return;
         
-        // Toon lege staat als er geen releases zijn
-        if (!releases.length) {
-            this._showEmptyState(container, filterContainer);
-            return;
-        }
-
-        // Toon filteropties wanneer we releases hebben
-        if (filterContainer) filterContainer.classList.remove('hidden');
-        
-        // Verwerk en sorteer releases
-        const processedReleases = this._processReleases(releases);
-        
-        // Toon "geen resultaten" als er niets overblijft na filteren
-        if (processedReleases.length === 0) {
-            this._showNoResultsState(container);
-            return;
-        }
-        
-        // Genereer en toon HTML
-        const html = this._generateReleasesHTML(processedReleases);
-        container.innerHTML = html;
-    }
-
-    /**
-     * Toon lege staat wanneer er geen nieuwe releases zijn
-     * @private
-     */
-    _showEmptyState(container, filterContainer) {
-        const releaseAgeDays = app.releaseAgeDays || 7;
-        
-        container.innerHTML = `
-            <div class="text-center py-8">
-                <div class="text-gray-400 mb-4">
-                    <i class="fas fa-bell text-5xl"></i>
+        const skeletons = Array(6).fill().map(() => `
+            <div class="release-card bg-white rounded-xl overflow-hidden shadow-md animate-pulse">
+                <div class="flex">
+                    <div class="w-16 h-16 bg-gray-300 flex-shrink-0"></div>
+                    <div class="flex-1 p-4">
+                        <div class="flex justify-between items-start mb-2">
+                            <div class="flex-1">
+                                <div class="h-4 bg-gray-300 rounded mb-2 w-3/4"></div>
+                                <div class="h-3 bg-gray-200 rounded w-1/2"></div>
+                            </div>
+                            <div class="w-16 h-6 bg-gray-200 rounded-full ml-4"></div>
+                        </div>
+                        <div class="flex gap-2 mt-3">
+                            <div class="h-8 bg-gray-300 rounded flex-1"></div>
+                            <div class="h-8 w-8 bg-gray-300 rounded"></div>
+                            <div class="h-8 w-8 bg-gray-300 rounded"></div>
+                        </div>
+                    </div>
                 </div>
-                <p class="text-gray-500">Geen nieuwe releases (< ${releaseAgeDays} dagen) gevonden van je gevolgde DJ's</p>
-                <p class="text-gray-500 text-sm mt-2">We laten het je weten wanneer er nieuwe muziek uitkomt</p>
             </div>
-        `;
+        `).join('');
         
-        // Verberg filteropties wanneer er geen releases zijn
-        if (filterContainer) filterContainer.classList.add('hidden');
-    }
-
-    /**
-     * Toon "geen resultaten" staat na filteren
-     * @private
-     */
-    _showNoResultsState(container) {
-        const searchQuery = document.getElementById('notifications-search')?.value?.trim();
         container.innerHTML = `
-            <div class="text-center py-8">
-                <div class="text-gray-400 mb-4">
-                    <i class="fas fa-search text-5xl"></i>
+            <div class="space-y-4">
+                <div class="text-center py-4">
+                    <div class="inline-flex items-center text-primary">
+                        <div class="animate-spin rounded-full h-6 w-6 border-2 border-primary border-t-transparent mr-3"></div>
+                        <span class="font-medium">Nieuwe releases controleren...</span>
+                    </div>
+                    <p class="text-sm text-gray-500 mt-2">We doorzoeken je gevolgde DJ's voor verse tracks</p>
                 </div>
-                <p class="text-gray-500">Geen releases gevonden die overeenkomen met "${searchQuery}"</p>
+                ${skeletons}
             </div>
         `;
     }
 
     /**
-     * Verwerk releases: platmaken, sorteren en filteren
+     * Verwerk en filter releases voor weergave
      * @param {Array} releases - Originele releases
      * @returns {Array} Verwerkte releases
      * @private
      */
-    _processReleases(releases) {
-        // Maak een platte lijst van releases voor makkelijker sorteren
-        const flatReleases = this._flattenReleases(releases);
+    _processAndFilterReleases(releases) {
+        // Start met de releases zoals ze van de API komen (al gesorteerd op release datum)
+        let processed = [...releases];
         
-        // Sorteer op basis van gebruikersvoorkeur
-        const sortedReleases = this._sortReleases(flatReleases);
+        // Controleer of er een sorteeroptie is geselecteerd
+        const sortOption = document.getElementById('releases-sort')?.value;
+        if (sortOption) {
+            processed = this._sortReleases(processed, sortOption);
+        }
         
-        // Filter op basis van zoekterm
-        const filteredReleases = this._filterReleasesBySearch(sortedReleases);
+        // Filter op basis van zoekterm als die er is
+        const searchQuery = document.getElementById('releases-search')?.value?.trim().toLowerCase();
+        if (searchQuery) {
+            processed = processed.filter(release => 
+                release.artist.name.toLowerCase().includes(searchQuery) ||
+                release.album.name.toLowerCase().includes(searchQuery)
+            );
+        }
         
-        return filteredReleases;
-    }
-
-    /**
-     * Maak een platte lijst van releases
-     * @param {Array} releases - Geneste releases structuur
-     * @returns {Array} Platte lijst
-     * @private
-     */
-    _flattenReleases(releases) {
-        return releases.map(release => ({
-            artist: release.artist,
-            album: release.album,
-            collaborationInfo: release.collaborationInfo,
-            releaseDate: new Date(release.album.release_date).getTime()
-        }));
+        return processed;
     }
 
     /**
      * Sorteer releases op basis van geselecteerde optie
      * @param {Array} releases - Releases om te sorteren
+     * @param {string} sortOption - Sorteeroptie
      * @returns {Array} Gesorteerde releases
      * @private
      */
-    _sortReleases(releases) {
-        const sortOrder = document.getElementById('notifications-sort')?.value || 'date-desc';
-        
-        switch (sortOrder) {
-            case 'date-desc': // Nieuwste eerst (standaard)
-                return releases.sort((a, b) => b.releaseDate - a.releaseDate);
-            case 'date-asc': // Oudste eerst
-                return releases.sort((a, b) => a.releaseDate - b.releaseDate);
-            case 'artist-asc': // Artiest naam A-Z
-                return releases.sort((a, b) => a.artist.name.localeCompare(b.artist.name));
-            case 'artist-desc': // Artiest naam Z-A
-                return releases.sort((a, b) => b.artist.name.localeCompare(a.artist.name));
-            default:
-                return releases.sort((a, b) => b.releaseDate - a.releaseDate);
-        }
-    }
-
-    /**
-     * Filter releases op basis van zoekterm
-     * @param {Array} releases - Releases om te filteren
-     * @returns {Array} Gefilterde releases
-     * @private
-     */
-    _filterReleasesBySearch(releases) {
-        const searchQuery = document.getElementById('notifications-search')?.value?.trim().toLowerCase();
-        
-        if (!searchQuery) return releases;
-        
-        return releases.filter(release => {
-            // Zoek in artiestnaam en albumnaam
-            const artistMatch = release.artist.name.toLowerCase().includes(searchQuery);
-            const albumMatch = release.album.name.toLowerCase().includes(searchQuery);
-            
-            // Zoek ook in namen van samenwerkende artiesten
-            let collaboratorMatch = false;
-            if (release.collaborationInfo?.isCollaboration) {
-                collaboratorMatch = release.collaborationInfo.collaboratingArtists.some(artist => 
-                    artist.toLowerCase().includes(searchQuery)
+    _sortReleases(releases, sortOption) {
+        switch (sortOption) {
+            case 'date-desc':
+                // Nieuwste eerst (default van API)
+                return releases.sort((a, b) => 
+                    new Date(b.album.release_date).getTime() - new Date(a.album.release_date).getTime()
                 );
-            }
-            
-            return artistMatch || albumMatch || collaboratorMatch;
-        });
+            case 'date-asc':
+                // Oudste eerst
+                return releases.sort((a, b) => 
+                    new Date(a.album.release_date).getTime() - new Date(b.album.release_date).getTime()
+                );
+            case 'artist-asc':
+                // Artiest A-Z
+                return releases.sort((a, b) => 
+                    a.artist.name.localeCompare(b.artist.name)
+                );
+            case 'artist-desc':
+                // Artiest Z-A
+                return releases.sort((a, b) => 
+                    b.artist.name.localeCompare(a.artist.name)
+                );
+            case 'album-asc':
+                // Album naam A-Z
+                return releases.sort((a, b) => 
+                    a.album.name.localeCompare(b.album.name)
+                );
+            case 'album-desc':
+                // Album naam Z-A
+                return releases.sort((a, b) => 
+                    b.album.name.localeCompare(a.album.name)
+                );
+            default:
+                // Default: nieuwste eerst
+                return releases.sort((a, b) => 
+                    new Date(b.album.release_date).getTime() - new Date(a.album.release_date).getTime()
+                );
+        }
     }
 
     /**
@@ -168,185 +132,299 @@ class NieuweReleasesUI {
      * @private
      */
     _generateReleasesHTML(releases) {
-        const releasesHTML = releases.map(release => this._generateReleaseCard(release)).join('');
-        return `<div class="space-y-4">${releasesHTML}</div>`;
+        return `
+            <div class="space-y-4">
+                ${releases.map(release => this._generateReleaseCard(release)).join('')}
+            </div>
+        `;
     }
 
     /**
-     * Genereer HTML voor één release kaart
+     * Genereer HTML voor één release
      * @param {Object} release - Release object
-     * @returns {string} HTML string
+     * @returns {string} HTML string voor release
      * @private
      */
     _generateReleaseCard(release) {
         const { artist, album, collaborationInfo } = release;
+        const releaseDate = new Date(album.release_date).toLocaleDateString('nl-NL', {
+            day: 'numeric',
+            month: 'short',
+            year: 'numeric'
+        });
         
-        // Formatteer datums
-        const releaseDate = new Date(album.release_date).toLocaleDateString('nl-NL');
-        const daysAgo = this._calculateDaysAgo(album.release_date);
-        const releaseDateText = this._formatDaysAgo(daysAgo);
+        // Calculate how many hours/days ago this was released
+        const now = new Date();
+        const releaseDateObj = new Date(album.release_date);
+        const timeDiff = now.getTime() - releaseDateObj.getTime();
+        const hoursAgo = Math.floor(timeDiff / (1000 * 60 * 60));
+        const daysAgo = Math.floor(hoursAgo / 24);
         
-        // Maak samenwerkingstekst
-        const collaborationText = this._generateCollaborationText(collaborationInfo);
-        
-        return `
-            <div class="bg-white p-4 rounded-xl shadow-md hover:shadow-lg transition-all duration-300 animate__animated animate__fadeIn">
-                <div class="flex items-start">
-                    <img src="${album.images[0]?.url || ''}" alt="${album.name}" class="w-20 h-20 mr-4 object-cover rounded-lg">
-                    <div class="flex-1">
-                        ${this._generateReleaseHeader(artist, album, collaborationText, releaseDate, releaseDateText)}
-                        ${this._generateReleaseInfo(album)}
-                        ${this._generateReleaseActions(artist, album)}
-                    </div>
-                </div>
-            </div>
-        `;
-    }
-
-    /**
-     * Bereken aantal dagen geleden vanaf vandaag
-     * @param {string} releaseDate - Release datum string
-     * @returns {number} Aantal dagen geleden
-     * @private
-     */
-    _calculateDaysAgo(releaseDate) {
-        return Math.floor((Date.now() - new Date(releaseDate).getTime()) / (1000 * 60 * 60 * 24));
-    }
-
-    /**
-     * Formatteer "dagen geleden" tekst
-     * @param {number} daysAgo - Aantal dagen geleden
-     * @returns {string} Geformatteerde tekst
-     * @private
-     */
-    _formatDaysAgo(daysAgo) {
-        if (daysAgo === 0) return 'Vandaag';
-        if (daysAgo === 1) return 'Gisteren';
-        return `${daysAgo} dagen geleden`;
-    }
-
-    /**
-     * Genereer samenwerkingstekst indien van toepassing
-     * @param {Object|null} collaborationInfo - Samenwerking informatie
-     * @returns {string} Samenwerkingstekst
-     * @private
-     */
-    _generateCollaborationText(collaborationInfo) {
-        if (!collaborationInfo?.isCollaboration) return '';
-        
-        const otherArtists = collaborationInfo.collaboratingArtists;
-        
-        if (otherArtists.length === 1) {
-            return `met ${otherArtists[0]}`;
+        let timeAgoText = '';
+        if (daysAgo === 0) {
+            if (hoursAgo < 1) {
+                timeAgoText = 'Zojuist uitgebracht';
+            } else {
+                timeAgoText = `${hoursAgo} uur geleden`;
+            }
+        } else if (daysAgo === 1) {
+            timeAgoText = 'Gisteren';
+        } else {
+            timeAgoText = `${daysAgo} dagen geleden`;
         }
         
-        return `met ${otherArtists.slice(0, -1).join(', ')} & ${otherArtists.slice(-1)}`;
-    }
-
-    /**
-     * Genereer header voor release (artiest, titel, datum)
-     * @private
-     */
-    _generateReleaseHeader(artist, album, collaborationText, releaseDate, releaseDateText) {
-        return `
-            <div class="flex md:flex-row flex-col justify-between md:items-start">
-                <div class="flex-1 min-w-0 pr-2">
-                    <div class="flex flex-wrap items-center gap-x-1 gap-y-0">
-                        <p class="font-bold text-lg">${artist.name}</p>
-                        ${collaborationText ? 
-                            `<span class="text-xs bg-primary bg-opacity-20 text-primary-dark px-2 py-0.5 rounded-full">
-                                ${collaborationText}
-                            </span>` : 
-                            ''
-                        }
-                    </div>
-                    <p class="text-primary-dark font-medium">${album.name}</p>
-                </div>
-                <div class="flex flex-col items-end">
-                    <span class="text-sm bg-secondary-light text-secondary-dark px-2 py-1 rounded-full">
-                        ${releaseDate}
-                    </span>
-                    <span class="text-xs text-gray-500 mt-1">${releaseDateText}</span>
-                </div>
-            </div>
-        `;
-    }
-
-    /**
-     * Genereer album informatie (type en aantal tracks)
-     * @private
-     */
-    _generateReleaseInfo(album) {
-        const albumType = album.album_type.charAt(0).toUpperCase() + album.album_type.slice(1);
-        const trackCount = album.total_tracks === 1 ? 'nummer' : 'nummers';
+        const albumImg = album.images.length ? album.images[0].url : '';
+        const isMultiTrack = album.total_tracks > 1;
+        const isFavoriteRelease = this._isReleaseInFavorites(album.id);
         
         return `
-            <p class="text-gray-600 text-sm mb-3">
-                ${albumType} • ${album.total_tracks} ${trackCount}
-            </p>
+            <div class="release-card bg-white rounded-xl overflow-hidden shadow-md hover:shadow-lg transition-all duration-300 animate__animated animate__fadeIn">
+                <div class="flex">
+                    <div class="w-16 h-16 md:w-20 md:h-20 flex-shrink-0 bg-gray-200 overflow-hidden relative">
+                        ${albumImg ? 
+                            `<img src="${albumImg}" alt="${album.name}" class="w-full h-full object-cover">` : 
+                            `<div class="w-full h-full flex items-center justify-center bg-gradient-to-r from-primary to-secondary text-white">
+                                <i class="fas fa-music"></i>
+                            </div>`
+                        }
+                        <div class="absolute top-1 right-1">
+                            <button onclick="window.nieuweReleasesUI.toggleFavoriteRelease('${album.id}')" 
+                                class="text-white hover:text-red-400 transition ${isFavoriteRelease ? 'text-red-400' : 'text-gray-400'}"
+                                title="${isFavoriteRelease ? 'Verwijder uit favorieten' : 'Toevoegen aan favorieten'}">
+                                <i class="fas fa-heart text-xs"></i>
+                            </button>
+                        </div>
+                        ${daysAgo === 0 ? `
+                            <div class="absolute bottom-1 left-1">
+                                <span class="bg-red-500 text-white text-xs px-1 rounded-full animate-pulse">
+                                    NIEUW
+                                </span>
+                            </div>
+                        ` : ''}
+                    </div>
+                    <div class="flex-1 p-3 md:p-4 min-w-0">
+                        <div class="flex justify-between items-start mb-2">
+                            <div class="min-w-0 flex-1">
+                                <h4 class="font-bold text-sm md:text-base truncate">${album.name}</h4>
+                                <p class="text-gray-600 text-xs md:text-sm">
+                                    ${artist.name}
+                                    ${collaborationInfo && collaborationInfo.isCollaboration ? 
+                                        ` <span class="text-primary">ft. ${collaborationInfo.collaboratingArtists.join(', ')}</span>` : ''
+                                    }
+                                </p>
+                            </div>
+                            <div class="flex flex-col items-end gap-1 ml-2 flex-shrink-0">
+                                <span class="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded-full whitespace-nowrap">
+                                    ${releaseDate}
+                                </span>
+                                <span class="text-xs text-blue-600 font-medium">
+                                    ${timeAgoText}
+                                </span>
+                                ${album.album_type === 'single' ? 
+                                    '<span class="text-xs bg-green-100 text-green-800 px-2 py-1 rounded-full">Single</span>' : 
+                                    '<span class="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded-full">Album</span>'
+                                }
+                            </div>
+                        </div>
+                        
+                        ${collaborationInfo && collaborationInfo.isCollaboration ? `
+                            <div class="mb-2">
+                                <span class="text-xs bg-purple-100 text-purple-800 px-2 py-1 rounded-full">
+                                    <i class="fas fa-users mr-1"></i>Collaboration
+                                </span>
+                            </div>
+                        ` : ''}
+                        
+                        <div class="flex gap-2 text-xs md:text-sm">
+                            <a href="${album.external_urls.spotify}" target="_blank" 
+                               class="flex-1 text-center bg-green-600 hover:bg-green-700 text-white py-2 rounded-lg transition">
+                               <i class="fab fa-spotify mr-1"></i>Beluisteren
+                            </a>
+                            <button onclick="app.getLatestTracks('${artist.id}')" 
+                               class="bg-purple-500 hover:bg-purple-600 text-white p-2 rounded-lg transition" title="Bekijk DJ profiel">
+                               <i class="fas fa-user"></i>
+                            </button>
+                            <button onclick="app.shareRelease('${artist.name}', '${album.name}', '${album.external_urls.spotify}')" 
+                               class="bg-blue-500 hover:bg-blue-600 text-white p-2 rounded-lg transition" title="Delen">
+                               <i class="fas fa-share-alt"></i>
+                            </button>
+                            ${isMultiTrack ? `
+                                <button onclick="ui.showAlbumTracks('${album.id}', '${album.name}', '${artist.name}')" 
+                                   class="bg-gray-500 hover:bg-gray-600 text-white p-2 rounded-lg transition" title="Alle tracks">
+                                   <i class="fas fa-list"></i>
+                                </button>
+                            ` : ''}
+                        </div>
+                    </div>
+                </div>
+            </div>
         `;
     }
 
     /**
-     * Genereer actieknoppen voor release
+     * Check if release is in favorites
+     * @param {string} albumId - Album ID
+     * @returns {boolean} True if in favorites
      * @private
      */
-    _generateReleaseActions(artist, album) {
-        return `
-            <div class="flex gap-2">
-                <a href="${album.external_urls.spotify}" target="_blank" 
-                  class="flex-1 text-center bg-green-600 hover:bg-green-700 text-white py-2 rounded-lg transition">
-                  <i class="fab fa-spotify mr-2"></i>Beluisteren
-                </a>
-                <button onclick="app.getLatestTracks('${artist.id}')" 
-                  class="bg-primary hover:bg-primary-dark text-white px-4 py-2 rounded-lg transition">
-                  <i class="fas fa-user mr-2"></i>Meer bekijken
-                </button>
-                <button onclick="app.shareRelease('${artist.name}', '${album.name}', '${album.external_urls.spotify}')" 
-                  class="bg-blue-500 hover:bg-blue-600 text-white p-2 rounded-lg transition">
-                  <i class="fas fa-share-alt"></i>
-                </button>
-            </div>
-        `;
+    _isReleaseInFavorites(albumId) {
+        const favoriteReleases = JSON.parse(localStorage.getItem('favoriteReleases') || '[]');
+        return favoriteReleases.includes(albumId);
+    }
+
+    /**
+     * Toggle favorite status of a release
+     * @param {string} albumId - Album ID
+     */
+    toggleFavoriteRelease(albumId) {
+        const favoriteReleases = JSON.parse(localStorage.getItem('favoriteReleases') || '[]');
+        const index = favoriteReleases.indexOf(albumId);
+        
+        if (index >= 0) {
+            favoriteReleases.splice(index, 1);
+            ui.showMessage('Release verwijderd uit favorieten', 'info');
+        } else {
+            favoriteReleases.push(albumId);
+            ui.showMessage('Release toegevoegd aan favorieten', 'success');
+        }
+        
+        localStorage.setItem('favoriteReleases', JSON.stringify(favoriteReleases));
+        
+        // Update UI
+        const heartButton = document.querySelector(`button[onclick*="${albumId}"] i`);
+        if (heartButton) {
+            const button = heartButton.parentElement;
+            if (index >= 0) {
+                button.classList.remove('text-red-400');
+                button.classList.add('text-gray-400');
+                button.title = 'Toevoegen aan favorieten';
+            } else {
+                button.classList.remove('text-gray-400');
+                button.classList.add('text-red-400');
+                button.title = 'Verwijder uit favorieten';
+            }
+        }
+    }
+
+    /**
+     * Setup favorite releases functionality
+     * @private
+     */
+    _setupFavoriteReleases() {
+        // This is handled in the HTML generation
+        console.log('Favorite releases functionality setup completed');
     }
 
     /**
      * Initialiseer sorteer- en filterinstellingen
      */
     initializeSortingAndFiltering() {
-        this._setupNotificationsSort();
-        this._setupNotificationsSearch();
+        this._setupReleasesSort();
+        this._setupReleasesSearch();
     }
 
     /**
-     * Setup sorteerinstellingen voor notificaties
+     * Setup sorteerinstellingen voor releases
      * @private
      */
-    _setupNotificationsSort() {
-        const notificationsSort = document.getElementById('notifications-sort');
-        if (notificationsSort) {
-            notificationsSort.addEventListener('change', () => {
-                app.checkNewReleases();
+    _setupReleasesSort() {
+        const releasesSort = document.getElementById('releases-sort');
+        if (releasesSort) {
+            releasesSort.addEventListener('change', () => {
+                // Herlaad releases met nieuwe sorteerinstelling
+                if (app && app.checkNewReleases) {
+                    // Re-process current releases instead of fetching new ones
+                    if (this.releases && this.releases.length > 0) {
+                        this.displayNotifications(this.releases);
+                    }
+                }
             });
         }
     }
 
     /**
-     * Setup zoekfunctionaliteit voor notificaties
+     * Setup zoekfunctionaliteit voor releases
      * @private
      */
-    _setupNotificationsSearch() {
-        const notificationsSearch = document.getElementById('notifications-search');
-        if (notificationsSearch) {
+    _setupReleasesSearch() {
+        const releasesSearch = document.getElementById('releases-search');
+        if (releasesSearch) {
             let debounceTimer;
             
-            notificationsSearch.addEventListener('input', () => {
+            releasesSearch.addEventListener('input', () => {
                 clearTimeout(debounceTimer);
                 debounceTimer = setTimeout(() => {
-                    app.checkNewReleases();
+                    if (this.releases && this.releases.length > 0) {
+                        this.displayNotifications(this.releases);
+                    }
                 }, 300);
             });
         }
+    }
+
+    /**
+     * Toon nieuwe releases
+     * @param {Array} releases - Array van nieuwe releases
+     */
+    displayNotifications(releases) {
+        // Store releases for sorting/filtering
+        this.releases = releases;
+        
+        const container = document.getElementById('notifications');
+        
+        if (!releases.length) {
+            this._showEmptyState(container);
+            return;
+        }
+        
+        // Process releases for display
+        const processedReleases = this._processAndFilterReleases(releases);
+        
+        if (processedReleases.length === 0) {
+            this._showNoResultsState(container);
+            return;
+        }
+        
+        const html = this._generateReleasesHTML(processedReleases);
+        container.innerHTML = html;
+        
+        // Add favorite functionality
+        this._setupFavoriteReleases();
+    }
+
+    /**
+     * Toon lege staat wanneer er geen releases zijn
+     * @private
+     */
+    _showEmptyState(container) {
+        container.innerHTML = `
+            <div class="text-center py-12">
+                <div class="text-gray-400 mb-6">
+                    <i class="fas fa-music text-6xl"></i>
+                </div>
+                <h3 class="text-xl font-bold text-gray-700 mb-3">Geen nieuwe releases</h3>
+                <p class="text-gray-500 mb-6">Je gevolgde DJ's hebben recent geen nieuwe muziek uitgebracht</p>
+                <button onclick="app.checkNewReleases()" class="bg-primary hover:bg-primary-dark text-white px-6 py-3 rounded-lg transition">
+                    <i class="fas fa-refresh mr-2"></i>Opnieuw controleren
+                </button>
+            </div>
+        `;
+    }
+
+    /**
+     * Toon "geen resultaten" staat na filteren
+     * @private
+     */
+    _showNoResultsState(container) {
+        container.innerHTML = `
+            <div class="text-center py-12">
+                <div class="text-gray-400 mb-6">
+                    <i class="fas fa-filter text-5xl"></i>
+                </div>
+                <h3 class="text-xl font-bold text-gray-700 mb-3">Geen releases gevonden</h3>
+                <p class="text-gray-500 mb-4">Geen releases gevonden met de huidige filters</p>
+            </div>
+        `;
     }
 }
 
