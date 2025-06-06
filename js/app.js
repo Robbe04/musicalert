@@ -308,8 +308,15 @@ class MusicAlertApp {
         // Save to localStorage with backup
         this.saveFavoritesToStorage();
         
-        // Update UI
+        // Update UI - ALTIJD na wijzigingen
         this.displayFavorites();
+        
+        // Update artist details view if we're currently viewing this artist
+        const resultsContainer = document.getElementById('results');
+        if (resultsContainer && resultsContainer.innerHTML.includes(artistId)) {
+            // Re-render the artist details to update the favorite status
+            this.getLatestTracks(artistId);
+        }
         
         // Check for new releases if we added an artist
         if (existingIndex < 0) {
@@ -329,7 +336,67 @@ class MusicAlertApp {
      * Display favorites
      */
     displayFavorites() {
-        ui.displayFavorites(this.favorites);
+        // Controleer of de module geladen is
+        if (window.gevolgdeDJsUI) {
+            window.gevolgdeDJsUI.displayFavorites(this.favorites);
+        } else {
+            console.error('gevolgdeDJsUI module not loaded');
+            // Fallback: toon een simpele lijst
+            this._fallbackDisplayFavorites();
+        }
+    }
+
+    /**
+     * Fallback voor als de module niet geladen is
+     */
+    _fallbackDisplayFavorites() {
+        const container = document.getElementById('favorites');
+        if (container) {
+            if (!this.favorites.length) {
+                container.innerHTML = `
+                    <div class="col-span-full text-center py-8">
+                        <div class="text-gray-400 mb-4">
+                            <i class="fas fa-heart text-5xl"></i>
+                        </div>
+                        <p class="text-gray-500">Je hebt nog geen DJ's gevolgd</p>
+                        <p class="text-gray-500 text-sm mt-2">Zoek naar artiesten en voeg ze toe aan je favorieten</p>
+                    </div>
+                `;
+            } else {
+                // Toon een simpele lijst van favorieten
+                const html = this.favorites.map(artist => `
+                    <div class="artist-card bg-white rounded-xl overflow-hidden shadow-md hover:shadow-lg transition-all duration-300 flex flex-col">
+                        <div class="h-40 bg-gray-200 overflow-hidden relative">
+                            <div class="is-favorite">
+                                <i class="fas fa-heart"></i> Gevolgd
+                            </div>
+                            ${artist.img ? 
+                                `<img src="${artist.img}" alt="${artist.name}" class="w-full h-full object-cover">` : 
+                                `<div class="w-full h-full flex items-center justify-center bg-gradient-to-r from-primary to-secondary text-white">
+                                    <i class="fas fa-music text-4xl"></i>
+                                </div>`
+                            }
+                        </div>
+                        <div class="p-4 flex-grow flex flex-col">
+                            <h3 class="font-bold text-lg mb-1 truncate">${artist.name}</h3>
+                            <p class="text-gray-600 text-sm mb-3 truncate">DJ / Producer</p>
+                            <div class="mt-auto flex gap-2">
+                                <button onclick="app.getLatestTracks('${artist.id}')" 
+                                    class="flex-1 bg-primary hover:bg-primary-dark text-white py-2 rounded-lg transition flex items-center justify-center">
+                                    <i class="fas fa-headphones mr-2"></i>Muziek
+                                </button>
+                                <button onclick="app.toggleFavorite('${artist.id}')" 
+                                    class="bg-red-500 hover:bg-red-600 text-white p-2 rounded-lg transition">
+                                    <i class="fas fa-heart-broken"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                `).join('');
+                
+                container.innerHTML = html;
+            }
+        }
     }
 
     /**
@@ -338,7 +405,12 @@ class MusicAlertApp {
      */
     async checkNewReleases(background = false) {
         if (!this.favorites.length) {
-            ui.displayNotifications([]);
+            // Controleer of de module geladen is
+            if (window.nieuweReleasesUI) {
+                window.nieuweReleasesUI.displayNotifications([]);
+            } else {
+                console.error('nieuweReleasesUI module not loaded');
+            }
             return;
         }
         
@@ -370,7 +442,12 @@ class MusicAlertApp {
             // Only update UI if not a background check
             if (!background) {
                 console.log(`Displaying ${newReleases.length} new releases in the UI`);
-                ui.displayNotifications(newReleases);
+                // Controleer of de module geladen is
+                if (window.nieuweReleasesUI) {
+                    window.nieuweReleasesUI.displayNotifications(newReleases);
+                } else {
+                    console.error('nieuweReleasesUI module not loaded');
+                }
                 ui.hideLoading();
             }
             
@@ -478,7 +555,12 @@ class MusicAlertApp {
      */
     async loadPreReleases(highPriority = false) {
         if (!this.favorites.length) {
-            ui.displayPreReleases([]);
+            // Controleer of de module geladen is
+            if (window.aankomendeReleasesUI) {
+                window.aankomendeReleasesUI.displayPreReleases([]);
+            } else {
+                console.error('aankomendeReleasesUI module not loaded');
+            }
             return;
         }
         
@@ -523,8 +605,13 @@ class MusicAlertApp {
             } else if (preReleases.length > 0) {
                 ui.showMessage(`${preReleases.length} aankomende releases gevonden`, 'success');
             }
-            
-            ui.displayPreReleases(preReleases);
+
+            // Controleer of de module geladen is
+            if (window.aankomendeReleasesUI) {
+                window.aankomendeReleasesUI.displayPreReleases(preReleases);
+            } else {
+                console.error('aankomendeReleasesUI module not loaded');
+            }
             
             if (!highPriority) {
                 ui.hideLoading();
@@ -610,7 +697,10 @@ class MusicAlertApp {
         document.getElementById(`${tab}-content`).classList.remove('hidden');
         
         // Load tab-specific content if needed
-        if (tab === 'notifications') {
+        if (tab === 'favorites') {
+            // Refresh favorites when switching to the tab
+            this.displayFavorites();
+        } else if (tab === 'notifications') {
             this.checkNewReleases();
         } else if (tab === 'pre-releases') {
             this.loadPreReleases();
