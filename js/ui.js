@@ -895,8 +895,8 @@ class UIService {
                 // Check collaborator names if this is a collaboration
                 let collaboratorMatch = false;
                 if (release.collaborationInfo && release.collaborationInfo.isCollaboration) {
-                    collaboratorMatch = release.collaborationInfo.collaboratingArtists.some(
-                        artist => artist.toLowerCase().includes(searchQuery)
+                    collaboratorMatch = release.collaborationInfo.collaboratingArtists.some(artist => 
+                        artist.toLowerCase().includes(searchQuery)
                     );
                 }
                 
@@ -969,8 +969,8 @@ class UIService {
                                   <i class="fab fa-spotify mr-2"></i>Beluisteren
                                 </a>
                                 <button onclick="app.getLatestTracks('${artist.id}')" 
-                                  class="flex-1 bg-primary hover:bg-primary-dark text-white py-2 rounded-lg transition">
-                                  Meer bekijken
+                                  class="bg-primary hover:bg-primary-dark text-white px-4 py-2 rounded-lg transition">
+                                  <i class="fas fa-user mr-2"></i>Meer bekijken
                                 </button>
                                 <button onclick="app.shareRelease('${artist.name}', '${album.name}', '${album.external_urls.spotify}')" 
                                   class="bg-blue-500 hover:bg-blue-600 text-white p-2 rounded-lg transition">
@@ -1721,13 +1721,17 @@ class UIService {
                         <i class="fas fa-calendar-day text-5xl"></i>
                     </div>
                     <p class="text-gray-500">Geen aankomende releases gevonden</p>
-                    <p class="text-gray-500 text-sm mt-2">Dit kan worden veroorzaakt door API-beperkingen</p>
-                    <p class="text-gray-500 text-xs mt-4">
-                        De Spotify API beperkt het aantal verzoeken. 
-                        Probeer het later opnieuw als je veel artiesten volgt.
-                    </p>
-                    <button onclick="app.loadPreReleases()" class="mt-4 bg-primary hover:bg-primary-dark text-white px-4 py-2 rounded-lg transition">
-                        Opnieuw proberen
+                    <p class="text-gray-500 text-sm mt-2">Mogelijk zijn er geen pre-releases beschikbaar of werd de API-limiet bereikt</p>
+                    <div class="mt-4 bg-yellow-50 p-3 rounded-lg text-yellow-800 text-sm">
+                        <p><i class="fas fa-lightbulb mr-2"></i><strong>Tips:</strong></p>
+                        <ul class="list-disc list-inside mt-2 space-y-1">
+                            <li>Volg meer artiesten die vaak nieuwe muziek uitbrengen</li>
+                            <li>Wacht 5-10 minuten en probeer opnieuw (API-limiet)</li>
+                            <li>Pre-releases zijn alleen zichtbaar als artiesten ze aankondigen</li>
+                        </ul>
+                    </div>
+                    <button onclick="app.loadPreReleases(true)" class="mt-4 bg-primary hover:bg-primary-dark text-white px-4 py-2 rounded-lg transition">
+                        Opnieuw zoeken
                     </button>
                 </div>
             `;
@@ -1755,10 +1759,10 @@ class UIService {
             container.innerHTML = `
                 <div class="col-span-full text-center py-8">
                     <div class="text-gray-400 mb-4">
-                        <i class="fas fa-calendar-day text-5xl"></i>
+                        <i class="fas fa-calendar-check text-5xl"></i>
                     </div>
-                    <p class="text-gray-500">Geen aankomende releases gevonden</p>
-                    <p class="text-gray-500 text-sm mt-2">Alle eerder getoonde releases zijn nu uitgebracht</p>
+                    <p class="text-gray-500">Alle eerder getoonde releases zijn nu uitgebracht</p>
+                    <p class="text-gray-500 text-sm mt-2">Controleer regelmatig op nieuwe aankondigingen</p>
                     <button onclick="app.loadPreReleases(true)" class="mt-4 bg-primary hover:bg-primary-dark text-white px-4 py-2 rounded-lg transition">
                         Zoek nieuwe releases
                     </button>
@@ -1774,16 +1778,19 @@ class UIService {
             return a.releaseDate - b.releaseDate;
         });
         
-        // Add a note about API limitations
-        const noteElement = document.createElement('div');
-        noteElement.className = 'col-span-full mb-4 p-3 bg-blue-50 text-blue-800 rounded-lg';
-        noteElement.innerHTML = `
-            <p class="text-sm flex items-center">
-                <i class="fas fa-info-circle mr-2"></i>
-                Door API-beperkingen worden alleen releases van de eerste ${preReleases.length > 10 ? '10' : preReleases.length} artiesten weergegeven.
-            </p>
+        // Add info about caching and limitations
+        const infoElement = document.createElement('div');
+        infoElement.className = 'mb-4 p-3 bg-blue-50 text-blue-800 rounded-lg';
+        infoElement.innerHTML = `
+            <div class="flex items-start">
+                <i class="fas fa-info-circle mr-2 mt-0.5"></i>
+                <div class="text-sm">
+                    <p><strong>Aankomende releases van ${Math.min(app.favorites.length, 12)} gevolgde artiesten</strong></p>
+                    <p class="mt-1">Data wordt 4 uur gecached om API-limieten te respecteren. Releases verdwijnen automatisch na uitgifte.</p>
+                </div>
+            </div>
         `;
-        container.appendChild(noteElement);
+        container.appendChild(infoElement);
         
         // Display upcoming releases
         for (const release of upcomingReleases) {
@@ -1808,11 +1815,12 @@ class UIService {
             });
             
             // Create release card
-            // ...existing code to create release card...
             const card = document.createElement('div');
             card.className = 'bg-white rounded-lg shadow-md overflow-hidden transition-all duration-300 hover:shadow-lg flex flex-col md:flex-row mb-4';
             
-            // ... rest of your existing display code ...
+            // Check if artist is in favorites
+            const isInFavorites = app.favorites.some(fav => fav.id === release.artist.id);
+            
             let artistJson = '';
             try {
                 artistJson = JSON.stringify(release.artist.genres || []).replace(/'/g, "\\'");
@@ -1823,45 +1831,47 @@ class UIService {
             card.innerHTML = `
                 <div class="md:w-1/4 flex-shrink-0">
                     <img src="${release.album.images[0]?.url || 'img/placeholder-album.png'}" 
-                        alt="${release.album.name}" class="w-full h-full object-cover">
+                        alt="${release.album.name}" class="w-full h-48 md:h-full object-cover">
                 </div>
                 <div class="p-4 md:w-3/4 flex flex-col">
-                    <div class="flex justify-between items-start">
-                        <div>
+                    <div class="flex justify-between items-start mb-3">
+                        <div class="flex-1 mr-3">
                             <h3 class="font-bold text-lg">${release.album.name}</h3>
                             <p class="text-primary">${release.artist.name}</p>
+                            <div class="mt-1">
+                                <span class="text-sm bg-gray-100 text-gray-700 px-2 py-1 rounded-full">
+                                    ${release.album.album_type.charAt(0).toUpperCase() + release.album.album_type.slice(1)}
+                                </span>
+                                <span class="text-sm bg-gray-100 text-gray-700 px-2 py-1 rounded-full ml-2">
+                                    ${release.album.total_tracks} tracks
+                                </span>
+                            </div>
                         </div>
                         <div class="text-right">
-                            <span class="bg-primary bg-opacity-20 text-primary px-2 py-1 rounded-full text-sm font-medium">
-                                ${daysUntilRelease === 0 ? 'Vandaag' : (daysUntilRelease === 1 ? 'Morgen' : `Nog ${daysUntilRelease} dagen`)}
+                            <span class="bg-primary bg-opacity-20 text-primary px-3 py-2 rounded-full text-sm font-medium whitespace-nowrap">
+                                ${daysUntilRelease === 0 ? 'Vandaag' : (daysUntilRelease === 1 ? 'Morgen' : `Nog ${daysUntilRelease} ${daysUntilRelease === 1 ? 'dag' : 'dagen'}`)}
                             </span>
                             <p class="text-sm text-gray-500 mt-1">${releaseDateFormatted}</p>
                         </div>
                     </div>
                     
-                    <div class="mt-2 mb-3">
-                        <span class="text-sm bg-gray-100 text-gray-700 px-2 py-1 rounded-full">
-                            ${release.album.album_type.charAt(0).toUpperCase() + release.album.album_type.slice(1)}
-                        </span>
-                        <span class="text-sm bg-gray-100 text-gray-700 px-2 py-1 rounded-full ml-2">
-                            ${release.album.total_tracks} tracks
-                        </span>
-                    </div>
-                    
                     <div class="mt-auto flex justify-between items-center">
-                        <button onclick="app.toggleFavorite('${release.artist.id}', '${release.artist.name.replace(/'/g, "\\'")}', '${release.artist.img?.replace(/'/g, "\\'")}', ${artistJson})" class="text-gray-600 hover:text-red-500 transition-colors">
-                            <i class="fas fa-heart mr-1 ${this.isArtistInFavorites(release.artist.id) ? 'text-red-500' : ''}"></i>
-                            <span>${this.isArtistInFavorites(release.artist.id) ? 'Gevolgd' : 'Volgen'}</span>
+                        <button onclick="app.toggleFavorite('${release.artist.id}', '${release.artist.name.replace(/'/g, "\\'")}', '${release.artist.images?.[0]?.url?.replace(/'/g, "\\'") || ''}', ${artistJson})" 
+                                class="text-gray-600 hover:text-red-500 transition-colors flex items-center">
+                            <i class="fas fa-heart mr-1 ${isInFavorites ? 'text-red-500' : ''}"></i>
+                            <span class="text-sm">${isInFavorites ? 'Gevolgd' : 'Volgen'}</span>
                         </button>
                         
-                        <div>
+                        <div class="flex gap-2">
                             ${release.album.external_urls?.spotify ? `
-                                <a href="${release.album.external_urls.spotify}" target="_blank" class="bg-primary hover:bg-primary-dark text-white px-3 py-1 rounded-lg text-sm transition">
+                                <a href="${release.album.external_urls.spotify}" target="_blank" 
+                                   class="bg-green-600 hover:bg-green-700 text-white px-3 py-2 rounded-lg text-sm transition">
                                     <i class="fab fa-spotify mr-1"></i>Pre-save
                                 </a>
                             ` : ''}
                             
-                            <button onclick="app.shareRelease('${release.artist.name.replace(/'/g, "\\'")}', '${release.album.name.replace(/'/g, "\\'")}', '${release.album.external_urls?.spotify || ''}')" class="ml-2 bg-gray-200 hover:bg-gray-300 text-gray-700 px-3 py-1 rounded-lg text-sm transition">
+                            <button onclick="app.shareRelease('${release.artist.name.replace(/'/g, "\\'")}', '${release.album.name.replace(/'/g, "\\'")}', '${release.album.external_urls?.spotify || ''}')" 
+                                    class="bg-blue-500 hover:bg-blue-600 text-white px-3 py-2 rounded-lg text-sm transition">
                                 <i class="fas fa-share-alt mr-1"></i>Delen
                             </button>
                         </div>
@@ -1872,13 +1882,16 @@ class UIService {
             container.appendChild(card);
         }
         
-        // Add debug info in development mode
-        if (location.hostname === "localhost" || location.hostname === "127.0.0.1") {
-            const debugElement = document.createElement('div');
-            debugElement.className = 'mt-4 p-2 bg-gray-100 rounded text-xs';
-            debugElement.innerHTML = `<p class="text-gray-500">Debug info: Loaded ${preReleases.length} upcoming releases</p>`;
-            container.appendChild(debugElement);
-        }
+        // Add refresh button at the bottom
+        const refreshElement = document.createElement('div');
+        refreshElement.className = 'mt-6 text-center';
+        refreshElement.innerHTML = `
+            <button onclick="app.loadPreReleases(true)" class="bg-gray-200 hover:bg-gray-300 text-gray-700 px-4 py-2 rounded-lg transition">
+                <i class="fas fa-sync-alt mr-2"></i>Vernieuw releases
+            </button>
+            <p class="text-xs text-gray-500 mt-2">Cache wordt elke 4 uur automatisch ververst</p>
+        `;
+        container.appendChild(refreshElement);
     }
 }
 

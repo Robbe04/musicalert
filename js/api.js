@@ -393,7 +393,7 @@ class SpotifyApiService {
                 const cachedData = localStorage.getItem(cacheKey);
                 const cacheExpiry = localStorage.getItem(cacheExpiryKey);
                 
-                // Use cache if it exists and is less than 6 hours old
+                // Use cache if it exists and is less than 4 hours old
                 if (cachedData && cacheExpiry && parseInt(cacheExpiry) > Date.now()) {
                     console.log('Using cached pre-releases data');
                     try {
@@ -401,16 +401,9 @@ class SpotifyApiService {
                         
                         // BELANGRIJKE FIX: Filter de cache om releases te verwijderen die al zijn uitgekomen
                         const now = new Date();
-                        now.setHours(0, 0, 0, 0);  // Set to start of today for consistent comparison
-                        
+                        now.setHours(0, 0, 0, 0);                        
                         const filteredReleases = parsedData.filter(release => {
-                            // Parse release date if it's a string
-                            let releaseDate = release.releaseDate;
-                            if (typeof releaseDate === 'string') {
-                                releaseDate = new Date(releaseDate);
-                            }
-                            
-                            // Keep only future releases (today and beyond)
+                            const releaseDate = new Date(release.releaseDate);
                             return releaseDate >= now;
                         });
                         
@@ -426,101 +419,108 @@ class SpotifyApiService {
                 }
             }
             
-            // To avoid rate limiting, only process a subset of artists
-            // If high priority, process more artists
-            const maxArtistsToProcess = highPriority ? 15 : 8; // Process more artists if high priority
+            // Implement smart batching to reduce API calls
+            const maxArtistsToProcess = Math.min(favorites.length, 12); // Process max 12 artists
             const artistsToProcess = favorites.slice(0, maxArtistsToProcess);
             
-            // Show a message that we're limiting the request due to API constraints
             if (favorites.length > maxArtistsToProcess) {
-                ui.showMessage(`API-limiet: Alleen de eerste ${maxArtistsToProcess} artiesten worden gecontroleerd op aankomende releases`, 'info');
+                console.log(`Processing only ${maxArtistsToProcess} of ${favorites.length} artists to avoid rate limits`);
             }
             
             // Get today's date for filtering
             const today = new Date();
             today.setHours(0, 0, 0, 0);  // Start of today
             
-            // Process artists with adjusted delay between requests (shorter if high priority)
-            const requestDelay = highPriority ? 200 : 350; // milliseconds
+            // Process artists in smaller batches with longer delays
+            const batchSize = 3; // Process 3 artists at a time
+            const batchDelay = 1500; // 1.5 seconds between batches
             
-            for (let i = 0; i < artistsToProcess.length; i++) {
-                const artist = artistsToProcess[i];
+            for (let i = 0; i < artistsToProcess.length; i += batchSize) {
+                const batch = artistsToProcess.slice(i, i + batchSize);
+                console.log(`Processing batch ${Math.floor(i / batchSize) + 1}/${Math.ceil(artistsToProcess.length / batchSize)}`);
                 
-                try {
-                    console.log(`Checking releases for: ${artist.name} (${i+1}/${artistsToProcess.length})`);
-                    
-                    // Add delay between requests to avoid rate limiting
-                    if (i > 0) {
-                        await new Promise(resolve => setTimeout(resolve, requestDelay));
-                    }
-                    
-                    // Get albums for this artist
-                    const response = await this.fetchWithRetry(
-                        `https://api.spotify.com/v1/artists/${artist.id}/albums?include_groups=album,single&market=NL&limit=5`,
-                        { headers },
-                        highPriority ? 2 : 1 // More retries if high priority
-                    );
-                    
-                    if (!response.ok) {
-                        if (response.status === 429) {
-                            // Get retry-after header
-                            const retryAfter = response.headers.get('Retry-After') || '5';
-                            console.log(`Rate limited for artist ${artist.name}. Retry after ${retryAfter}s`);
-                            
-                            // Skip this artist for now
-                            continue;
+                // Process batch concurrently
+                const batchPromises = batch.map(async (artist, index) => {
+                    try {
+                        // Small delay between requests within batch
+                        if (index > 0) {
+                            await new Promise(resolve => setTimeout(resolve, 300));
                         }
                         
-                        console.error(`API error for artist ${artist.name}: ${response.status}`);
-                        continue;
-                    }
-                    
-                    const data = await response.json();
-                    
-                    // Process albums
-                    for (const album of data.items) {
-                        // Skip albums we've already processed
-                        if (processedAlbumIds.has(album.id)) {
-                            continue;
+                        const response = await this.fetchWithRetry(
+                            `https://api.spotify.com/v1/artists/${artist.id}/albums?include_groups=album,single&market=NL&limit=8`,
+                            { headers },
+                            3 // More retries
+                        );
+                        
+                        if (!response.ok) {
+                            if (response.status === 429) {
+                                console.warn(`Rate limited for artist ${artist.name}, skipping batch`);
+                                return [];
+                            }
+                            console.error(`API error for artist ${artist.name}: ${response.status}`);
+                            return [];
                         }
                         
-                        // Add to processed IDs
-                        processedAlbumIds.add(album.id);
+                        const data = await response.json();
+                        const artistReleases = [];
                         
-                        // Parse release date
-                        let releaseDate;
-                        try {
-                            // Handle YYYY-MM-DD and YYYY formats
-                            if (album.release_date_precision === 'day') {
-                                releaseDate = new Date(album.release_date);
-                            } else if (album.release_date_precision === 'month') {
-                                releaseDate = new Date(`${album.release_date}-01`);
-                            } else {
-                                releaseDate = new Date(album.release_date);
+                        // Process albums for this artist
+                        for (const album of data.items) {
+                            // Skip albums we've already processed
+                            if (processedAlbumIds.has(album.id)) {
+                                continue;
                             }
                             
-                            // Set to midnight for consistent comparison
-                            releaseDate.setHours(0, 0, 0, 0);
-                        } catch (e) {
-                            console.error(`Error parsing date: ${album.release_date}`, e);
-                            continue;
+                            // Add to processed IDs
+                            processedAlbumIds.add(album.id);
+                            
+                            // Parse release date
+                            let releaseDate;
+                            try {
+                                releaseDate = new Date(album.release_date);
+                                // If only year or year-month provided, assume last day of period
+                                if (album.release_date.length === 4) { // YYYY
+                                    releaseDate = new Date(parseInt(album.release_date), 11, 31); // Dec 31
+                                } else if (album.release_date.length === 7) { // YYYY-MM
+                                    const [year, month] = album.release_date.split('-');
+                                    releaseDate = new Date(parseInt(year), parseInt(month), 0); // Last day of month
+                                }
+                                releaseDate.setHours(0, 0, 0, 0);
+                            } catch (e) {
+                                console.error(`Invalid release date for ${album.name}: ${album.release_date}`);
+                                continue;
+                            }
+                            
+                            // Check if this is a future release (today or later)
+                            if (releaseDate >= today) {
+                                artistReleases.push({
+                                    artist: artist,
+                                    album: album,
+                                    releaseDate: releaseDate
+                                });
+                            }
                         }
                         
-                        // BELANGRIJKE FIX: Check if this is a future release (today or later)
-                        // This ensures we don't show already released albums
-                        if (releaseDate >= today) {
-                            console.log(`Found upcoming release: ${album.name} by ${artist.name}, date: ${releaseDate.toISOString()}`);
-                            
-                            preReleases.push({
-                                artist: artist,
-                                album: album,
-                                releaseDate: releaseDate,
-                                isPreRelease: true
-                            });
-                        }
+                        return artistReleases;
+                    } catch (error) {
+                        console.error(`Error fetching releases for ${artist.name}:`, error);
+                        return [];
                     }
-                } catch (error) {
-                    console.error(`Error fetching releases for ${artist.name}:`, error);
+                });
+                
+                // Wait for batch to complete
+                const batchResults = await Promise.all(batchPromises);
+                
+                // Flatten and add to main results
+                batchResults.forEach(artistReleases => {
+                    preReleases.push(...artistReleases);
+                });
+                
+                // Wait between batches (except for the last batch)
+                if (i + batchSize < artistsToProcess.length) {
+                    console.log(`Waiting ${batchDelay}ms before next batch...`);
+                    await new Promise(resolve => setTimeout(resolve, batchDelay));
                 }
             }
             
@@ -529,58 +529,53 @@ class SpotifyApiService {
             
             console.log(`Found ${preReleases.length} upcoming releases in total`);
             
-            // Get detailed information for each upcoming release
+            // Get detailed information for the top releases
             if (preReleases.length > 0) {
                 const detailedReleases = [];
-                const detailDelay = highPriority ? 150 : 300; // milliseconds
+                const maxToDetail = Math.min(preReleases.length, limit);
                 
-                // Process releases with delay between requests
-                for (let i = 0; i < Math.min(preReleases.length, limit); i++) {
-                    const release = preReleases[i];
+                // Process detailed album info in smaller batches
+                for (let i = 0; i < maxToDetail; i += 2) {
+                    const detailBatch = preReleases.slice(i, i + 2);
                     
-                    try {
-                        // Add delay between requests
-                        if (i > 0) {
-                            await new Promise(resolve => setTimeout(resolve, detailDelay));
-                        }
-                        
-                        // Get full album details
-                        const albumResponse = await this.fetchWithRetry(
-                            `https://api.spotify.com/v1/albums/${release.album.id}`,
-                            { headers },
-                            highPriority ? 2 : 1 // More retries if high priority
-                        );
-                        
-                        if (!albumResponse.ok) {
-                            if (albumResponse.status === 429) {
-                                console.log(`Rate limited for album ${release.album.name}. Skipping detailed info.`);
-                                detailedReleases.push(release); // Use basic info
-                                continue;
+                    const detailPromises = detailBatch.map(async (release) => {
+                        try {
+                            // Add delay between requests
+                            await new Promise(resolve => setTimeout(resolve, 500));
+                            
+                            const albumResponse = await this.fetchWithRetry(
+                                `https://api.spotify.com/v1/albums/${release.album.id}`,
+                                { headers },
+                                2
+                            );
+                            
+                            if (!albumResponse.ok) {
+                                console.warn(`Failed to get detailed info for ${release.album.name}`);
+                                return release; // Return basic info
                             }
                             
-                            console.error(`Failed to get album details: ${albumResponse.status}`);
-                            detailedReleases.push(release); // Use basic info
-                            continue;
+                            const fullAlbum = await albumResponse.json();
+                            
+                            return {
+                                ...release,
+                                album: fullAlbum
+                            };
+                        } catch (error) {
+                            console.error(`Error fetching album details for ${release.album.name}:`, error);
+                            return release; // Return basic info
                         }
-                        
-                        const fullAlbum = await albumResponse.json();
-                        
-                        detailedReleases.push({
-                            ...release,
-                            album: fullAlbum
-                        });
-                    } catch (error) {
-                        console.error(`Error fetching album details for ${release.album.name}:`, error);
-                        detailedReleases.push(release); // Use basic info if error occurs
-                    }
+                    });
+                    
+                    const detailResults = await Promise.all(detailPromises);
+                    detailedReleases.push(...detailResults);
                 }
                 
                 console.log(`Returning ${detailedReleases.length} detailed upcoming releases`);
                 
-                // Cache the results for 6 hours
+                // Cache the results for 4 hours
                 try {
                     localStorage.setItem('pre-releases-cache', JSON.stringify(detailedReleases));
-                    localStorage.setItem('pre-releases-cache-expiry', (Date.now() + 6 * 60 * 60 * 1000).toString()); // 6 hours
+                    localStorage.setItem('pre-releases-cache-expiry', (Date.now() + 4 * 60 * 60 * 1000).toString()); // 4 hours
                 } catch (e) {
                     console.error('Error saving to cache:', e);
                 }

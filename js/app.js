@@ -484,7 +484,9 @@ class MusicAlertApp {
         
         try {
             // Show loading indicator in both the overlay and pre-releases container
-            ui.showLoading('Aankomende releases laden...');
+            if (!highPriority) {
+                ui.showLoading('Aankomende releases laden...');
+            }
             
             const container = document.getElementById('pre-releases');
             if (container) {
@@ -494,7 +496,10 @@ class MusicAlertApp {
                             <i class="fas fa-spinner fa-spin text-3xl loading-spinner"></i>
                         </div>
                         <p class="text-gray-500">Aankomende releases laden...</p>
-                        <p class="text-gray-500 text-xs mt-2">Dit kan even duren door API-beperkingen</p>
+                        <p class="text-gray-500 text-xs mt-2">Dit kan 30-60 seconden duren door API-beperkingen</p>
+                        <div class="mt-4 bg-blue-50 p-3 rounded-lg text-blue-800 text-sm">
+                            <p><i class="fas fa-info-circle mr-2"></i>We controleren je eerste ${Math.min(this.favorites.length, 12)} gevolgde artiesten</p>
+                        </div>
                     </div>
                 `;
             }
@@ -510,21 +515,26 @@ class MusicAlertApp {
             }
             
             // Pass high priority flag to API call
-            const preReleases = await api.getPreReleases(this.favorites, 10, highPriority);
+            const preReleases = await api.getPreReleases(this.favorites, 15, highPriority);
             console.log(`Received ${preReleases?.length || 0} pre-releases from API`);
             
-            if (preReleases?.length === 0) {
-                ui.showMessage('Geen aankomende releases gevonden of API-limiet bereikt. Probeer het later opnieuw.', 'info');
-            } else if (preReleases?.length > 0) {
+            if (!preReleases || preReleases.length === 0) {
+                ui.showMessage('Geen aankomende releases gevonden. Probeer het over een paar minuten opnieuw.', 'info');
+            } else if (preReleases.length > 0) {
                 ui.showMessage(`${preReleases.length} aankomende releases gevonden`, 'success');
             }
             
             ui.displayPreReleases(preReleases);
-            ui.hideLoading();
+            
+            if (!highPriority) {
+                ui.hideLoading();
+            }
             
             return preReleases;
         } catch (error) {
-            ui.hideLoading();
+            if (!highPriority) {
+                ui.hideLoading();
+            }
             console.error('Error loading pre-releases:', error);
             
             // Display error message in the pre-releases container
@@ -536,15 +546,20 @@ class MusicAlertApp {
                             <i class="fas fa-exclamation-triangle text-5xl"></i>
                         </div>
                         <p class="text-gray-700">Er is een fout opgetreden bij het laden van aankomende releases</p>
-                        <p class="text-gray-500 text-sm mt-2">Waarschijnlijk heb je de API-limiet bereikt. Probeer het later opnieuw.</p>
-                        <button onclick="app.loadPreReleases()" class="mt-4 bg-primary hover:bg-primary-dark text-white px-4 py-2 rounded-lg transition">
-                            Opnieuw proberen
-                        </button>
+                        <p class="text-gray-500 text-sm mt-2">Dit kan gebeuren door API-beperkingen. Probeer het over 5-10 minuten opnieuw.</p>
+                        <div class="mt-4 space-y-2">
+                            <button onclick="app.loadPreReleases()" class="bg-primary hover:bg-primary-dark text-white px-4 py-2 rounded-lg transition">
+                                Opnieuw proberen
+                            </button>
+                            <p class="text-xs text-gray-400">
+                                Cache wordt 4 uur bewaard om API-verzoeken te beperken
+                            </p>
+                        </div>
                     </div>
                 `;
             }
             
-            ui.showMessage('API-limiet bereikt. Je hebt te veel verzoeken gedaan naar de Spotify API.', 'error');
+            ui.showMessage('API-limiet bereikt. Wacht 5-10 minuten voordat je het opnieuw probeert.', 'error');
         }
     }
 
@@ -567,7 +582,7 @@ class MusicAlertApp {
     }
 
     /**
-     * Switch between tabs (favorites, notifications, pre-releases, recommendations)
+     * Switch between tabs (favorites, notifications, pre-releases)
      */
     switchTab(tab) {
         // Update tab buttons
@@ -580,9 +595,6 @@ class MusicAlertApp {
         document.getElementById('tab-pre-releases').classList.remove('tab-active', 'text-primary');
         document.getElementById('tab-pre-releases').classList.add('text-gray-500');
         
-        document.getElementById('tab-recommendations').classList.remove('tab-active', 'text-primary');
-        document.getElementById('tab-recommendations').classList.add('text-gray-500');
-        
         // Handle events tab separately as it opens a modal
         document.getElementById('tab-events').classList.remove('tab-active', 'text-primary');
         document.getElementById('tab-events').classList.add('text-gray-500');
@@ -594,18 +606,14 @@ class MusicAlertApp {
         document.getElementById('favorites-content').classList.add('hidden');
         document.getElementById('notifications-content').classList.add('hidden');
         document.getElementById('pre-releases-content').classList.add('hidden');
-        document.getElementById('recommendations-content').classList.add('hidden');
         
         document.getElementById(`${tab}-content`).classList.remove('hidden');
         
         // Load tab-specific content if needed
-        if (tab === 'events') {
-            this.showEventsPanel();
-        } else if (tab === 'pre-releases' && document.getElementById('pre-releases').children.length === 0) {
+        if (tab === 'notifications') {
+            this.checkNewReleases();
+        } else if (tab === 'pre-releases') {
             this.loadPreReleases();
-        } else if (tab === 'recommendations' && document.getElementById('recommendations').children.length === 0) {
-            this.loadTrackRecommendations();
-            this.loadRecommendations(); // Also load artist recommendations
         }
     }
     
