@@ -413,12 +413,10 @@ class MusicAlertApp {
      * @param {boolean} background - Whether this is a background check
      */
     async checkNewReleases(background = false) {
-        // Debug logging
         console.log('checkNewReleases called, background:', background);
         console.log('nieuweReleasesUI available:', !!window.nieuweReleasesUI);
         
         if (!this.favorites.length) {
-            // Controleer of de module geladen is
             if (window.nieuweReleasesUI) {
                 try {
                     window.nieuweReleasesUI.displayNotifications([]);
@@ -433,7 +431,6 @@ class MusicAlertApp {
         
         try {
             if (!background) {
-                // Show loading skeletons instead of basic loading
                 if (window.nieuweReleasesUI) {
                     try {
                         window.nieuweReleasesUI.showLoadingSkeletons();
@@ -441,7 +438,17 @@ class MusicAlertApp {
                         console.error('Error in showLoadingSkeletons:', error);
                     }
                 }
-                ui.showLoading('Nieuwe releases controleren...');
+                
+                // Check if we're using cached data
+                const cacheExpiry = localStorage.getItem('new-releases-cache-expiry');
+                const isUsingCache = cacheExpiry && parseInt(cacheExpiry) > Date.now();
+                
+                if (isUsingCache) {
+                    const nextMidnight = new Date(parseInt(cacheExpiry));
+                    ui.showLoading(`Nieuwe releases (cached tot ${nextMidnight.toLocaleTimeString('nl-NL')})`);
+                } else {
+                    ui.showLoading('Nieuwe releases controleren...');
+                }
             }
             
             // Pass the releaseAgeDays parameter to the API call
@@ -455,7 +462,6 @@ class MusicAlertApp {
             // Only update UI if not a background check
             if (!background) {
                 console.log(`Displaying ${newReleases.length} new releases in the UI`);
-                // Controleer of de module geladen is
                 if (window.nieuweReleasesUI) {
                     try {
                         window.nieuweReleasesUI.displayNotifications(newReleases);
@@ -467,9 +473,19 @@ class MusicAlertApp {
                 }
                 ui.hideLoading();
                 
-                // Show success notification
+                // Show appropriate success notification
+                const cacheExpiry = localStorage.getItem('new-releases-cache-expiry');
+                const isUsingCache = cacheExpiry && parseInt(cacheExpiry) > Date.now();
+                
                 if (newReleases.length > 0) {
-                    ui.showMessage(`${newReleases.length} nieuwe release${newReleases.length === 1 ? '' : 's'} gevonden!`, 'success');
+                    if (isUsingCache) {
+                        const nextMidnight = new Date(parseInt(cacheExpiry));
+                        ui.showMessage(`${newReleases.length} nieuwe release${newReleases.length === 1 ? '' : 's'} (cached tot ${nextMidnight.toLocaleTimeString('nl-NL')})`, 'success');
+                    } else {
+                        ui.showMessage(`${newReleases.length} nieuwe release${newReleases.length === 1 ? '' : 's'} gevonden!`, 'success');
+                    }
+                } else if (!isUsingCache) {
+                    ui.showMessage('Geen nieuwe releases gevonden', 'info');
                 }
             }
             
@@ -482,6 +498,21 @@ class MusicAlertApp {
             console.error('Error checking new releases:', error);
             return [];
         }
+    }
+    
+    /**
+     * Force refresh new releases (bypass cache)
+     */
+    forceRefreshNewReleases() {
+        // Clear the cache to force fresh fetch
+        localStorage.removeItem('new-releases-cache');
+        localStorage.removeItem('new-releases-cache-expiry');
+        
+        // Show message
+        ui.showMessage('Cache geleegd - nieuwe releases worden opnieuw opgehaald', 'info');
+        
+        // Refresh the data
+        this.checkNewReleases();
     }
 
     /**
@@ -577,7 +608,6 @@ class MusicAlertApp {
      */
     async loadPreReleases(highPriority = false) {
         if (!this.favorites.length) {
-            // Controleer of de module geladen is
             if (window.aankomendeReleasesUI) {
                 window.aankomendeReleasesUI.displayPreReleases([]);
             } else {
@@ -587,9 +617,8 @@ class MusicAlertApp {
         }
         
         try {
-            // Show loading indicator in both the overlay and pre-releases container
             if (!highPriority) {
-                ui.showLoading('Aankomende releases laden...');
+                ui.showLoading('Presave mogelijkheden laden...');
             }
             
             const container = document.getElementById('pre-releases');
@@ -599,36 +628,43 @@ class MusicAlertApp {
                         <div class="text-gray-400 mb-4">
                             <i class="fas fa-spinner fa-spin text-3xl loading-spinner"></i>
                         </div>
-                        <p class="text-gray-500">Aankomende releases laden...</p>
-                        <p class="text-gray-500 text-xs mt-2">Dit kan 30-60 seconden duren door API-beperkingen</p>
+                        <p class="text-gray-500">Presave mogelijkheden laden...</p>
+                        <p class="text-gray-500 text-xs mt-2">Zoekt naar releases in de komende week</p>
                         <div class="mt-4 bg-blue-50 p-3 rounded-lg text-blue-800 text-sm">
-                            <p><i class="fas fa-info-circle mr-2"></i>We controleren je eerste ${Math.min(this.favorites.length, 12)} gevolgde artiesten</p>
+                            <p><i class="fas fa-info-circle mr-2"></i>We controleren je eerste ${Math.min(this.favorites.length, 25)} gevolgde artiesten</p>
+                            <p class="mt-1 text-xs">Alleen releases van vandaag tot 1 week vooruit (presave venster)</p>
+                            <p class="mt-1 text-xs">Tip: Voeg ?refresh toe aan de URL om cache te vernieuwen</p>
                         </div>
                     </div>
                 `;
             }
             
-            console.log('Fetching pre-releases...');
+            console.log('Fetching presave opportunities for the next week...');
+            console.log('Favorites to check:', this.favorites.map(f => f.name));
             
-            // Clear cache if forcing refresh
             const forceRefresh = new URLSearchParams(window.location.search).has('refresh');
             if (forceRefresh) {
                 localStorage.removeItem('pre-releases-cache');
                 localStorage.removeItem('pre-releases-cache-expiry');
-                console.log('Forcing refresh of pre-releases cache');
+                console.log('Forcing refresh of presave cache');
             }
             
-            // Pass high priority flag to API call
-            const preReleases = await api.getPreReleases(this.favorites, 15, highPriority);
-            console.log(`Received ${preReleases?.length || 0} pre-releases from API`);
+            // Get all presave opportunities
+            const preReleases = await api.getPreReleases(this.favorites, 100, highPriority);
+            console.log(`Received ${preReleases?.length || 0} presave opportunities from API`);
             
             if (!preReleases || preReleases.length === 0) {
-                ui.showMessage('Geen aankomende releases gevonden. Probeer het over een paar minuten opnieuw.', 'info');
+                ui.showMessage('Geen presave mogelijkheden gevonden in de komende week.', 'info');
             } else if (preReleases.length > 0) {
-                ui.showMessage(`${preReleases.length} aankomende releases gevonden`, 'success');
+                ui.showMessage(`${preReleases.length} presave mogelijkheden gevonden in de komende week`, 'success');
+                
+                // Log examples
+                console.log('Presave opportunities:');
+                preReleases.forEach(release => {
+                    console.log(`- ${release.album.name} by ${release.artist.name} on ${release.album.release_date}`);
+                });
             }
 
-            // Controleer of de module geladen is
             if (window.aankomendeReleasesUI) {
                 window.aankomendeReleasesUI.displayPreReleases(preReleases);
             } else {
@@ -646,7 +682,6 @@ class MusicAlertApp {
             }
             console.error('Error loading pre-releases:', error);
             
-            // Display error message in the pre-releases container
             const container = document.getElementById('pre-releases');
             if (container) {
                 container.innerHTML = `
@@ -654,14 +689,17 @@ class MusicAlertApp {
                         <div class="text-gray-400 mb-4">
                             <i class="fas fa-exclamation-triangle text-5xl"></i>
                         </div>
-                        <p class="text-gray-700">Er is een fout opgetreden bij het laden van aankomende releases</p>
+                        <p class="text-gray-700">Er is een fout opgetreden bij het laden van presave mogelijkheden</p>
                         <p class="text-gray-500 text-sm mt-2">Dit kan gebeuren door API-beperkingen. Probeer het over 5-10 minuten opnieuw.</p>
                         <div class="mt-4 space-y-2">
                             <button onclick="app.loadPreReleases()" class="bg-primary hover:bg-primary-dark text-white px-4 py-2 rounded-lg transition">
                                 Opnieuw proberen
                             </button>
+                            <a href="?refresh" class="block bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg transition">
+                                <i class="fas fa-refresh mr-2"></i>Cache vernieuwen
+                            </a>
                             <p class="text-xs text-gray-400">
-                                Cache wordt 4 uur bewaard om API-verzoeken te beperken
+                                Cache wordt 1 uur bewaard om API-verzoeken te beperken
                             </p>
                         </div>
                     </div>
