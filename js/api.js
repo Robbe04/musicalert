@@ -463,7 +463,7 @@ class SpotifyApiService {
             }
             
             // Process more artists since we're fetching much less data per artist
-            const maxArtistsToProcess = Math.min(favorites.length, 25); // Increased to 25
+            const maxArtistsToProcess = Math.min(favorites.length, 30); // Increased to 30
             const artistsToProcess = favorites.slice(0, maxArtistsToProcess);
             
             console.log(`Processing ${maxArtistsToProcess} artists for presave opportunities`);
@@ -478,8 +478,8 @@ class SpotifyApiService {
             console.log(`Presave window: ${today.toDateString()} to ${oneWeekFromNow.toDateString()}`);
             
             // Process artists in batches
-            const batchSize = 5; // Larger batches since we're getting less data
-            const batchDelay = 800; // Shorter delay
+            const batchSize = 8; // Larger batches since we expect very few results
+            const batchDelay = 500; // Shorter delay since most requests will return no results
             
             for (let i = 0; i < artistsToProcess.length; i += batchSize) {
                 const batch = artistsToProcess.slice(i, i + batchSize);
@@ -488,14 +488,14 @@ class SpotifyApiService {
                 const batchPromises = batch.map(async (artist, index) => {
                     try {
                         if (index > 0) {
-                            await new Promise(resolve => setTimeout(resolve, 200));
+                            await new Promise(resolve => setTimeout(resolve, 100));
                         }
                         
-                        console.log(`Checking presave opportunities for ${artist.name}...`);
+                        console.log(`Checking presave window for ${artist.name}...`);
                         
-                        // Get only the 8 most recent albums/singles
+                        // Get only the 3 most recent albums/singles (minimal request)
                         const response = await this.fetchWithRetry(
-                            `https://api.spotify.com/v1/artists/${artist.id}/albums?include_groups=album,single&market=NL&limit=8`,
+                            `https://api.spotify.com/v1/artists/${artist.id}/albums?include_groups=album,single&market=NL&limit=3`,
                             { headers },
                             3
                         );
@@ -510,22 +510,11 @@ class SpotifyApiService {
                         }
                         
                         const data = await response.json();
-                        const artistPresaves = [];
                         
-                        console.log(`Found ${data.items.length} recent releases for ${artist.name}`);
-                        
-                        // Only check releases within our presave window
-                        for (const album of data.items) {
-                            if (processedAlbumIds.has(album.id)) {
-                                continue;
-                            }
-                            
-                            processedAlbumIds.add(album.id);
-                            
-                            // Parse release date
-                            let releaseDate;
+                        // IMMEDIATELY filter to only future releases within presave window
+                        const futureReleases = data.items.filter(album => {
                             try {
-                                releaseDate = new Date(album.release_date);
+                                let releaseDate = new Date(album.release_date);
                                 
                                 // Handle different date formats
                                 if (album.release_date.length === 4) { // YYYY
@@ -538,29 +527,44 @@ class SpotifyApiService {
                                 }
                                 
                                 releaseDate.setHours(0, 0, 0, 0);
+                                
+                                // ONLY return releases in the presave window (today to 1 week)
+                                return releaseDate >= today && releaseDate <= oneWeekFromNow;
                             } catch (e) {
                                 console.error(`Invalid release date for ${album.name}: ${album.release_date}`);
-                                continue;
+                                return false;
                             }
+                        });
+                        
+                        // Only log if we find something relevant
+                        if (futureReleases.length > 0) {
+                            console.log(`✅ ${artist.name}: Found ${futureReleases.length} presave opportunities`);
                             
-                            // ONLY include releases in the presave window (today to 1 week)
-                            if (releaseDate >= today && releaseDate <= oneWeekFromNow) {
-                                console.log(`✅ Presave opportunity: "${album.name}" by ${artist.name} on ${album.release_date}`);
+                            const artistPresaves = [];
+                            
+                            for (const album of futureReleases) {
+                                if (processedAlbumIds.has(album.id)) {
+                                    continue;
+                                }
+                                
+                                processedAlbumIds.add(album.id);
+                                
+                                const releaseDate = new Date(album.release_date);
+                                releaseDate.setHours(0, 0, 0, 0);
+                                
+                                console.log(`🎵 Presave: "${album.name}" by ${artist.name} on ${album.release_date}`);
                                 artistPresaves.push({
                                     artist: artist,
                                     album: album,
                                     releaseDate: releaseDate
                                 });
-                            } else if (releaseDate > oneWeekFromNow) {
-                                // Stop checking if we're past the presave window
-                                console.log(`⏭️ Release "${album.name}" is beyond presave window (${album.release_date}), stopping for ${artist.name}`);
-                                break;
                             }
-                            // Skip releases in the past (before today) - no logging needed
+                            
+                            return artistPresaves;
+                        } else {
+                            // No presave opportunities found - this is normal
+                            return [];
                         }
-                        
-                        console.log(`${artist.name}: ${artistPresaves.length} presave opportunities found`);
-                        return artistPresaves;
                     } catch (error) {
                         console.error(`Error fetching presaves for ${artist.name}:`, error);
                         return [];
@@ -582,50 +586,48 @@ class SpotifyApiService {
             // Sort by release date (closest first)
             preReleases.sort((a, b) => a.releaseDate - b.releaseDate);
             
-            console.log(`Found ${preReleases.length} presave opportunities in the next week`);
-            preReleases.forEach(release => {
-                console.log(`- ${release.album.name} by ${release.artist.name} on ${release.album.release_date}`);
-            });
+            console.log(`🎯 RESULT: Found ${preReleases.length} presave opportunities in the next week`);
+            if (preReleases.length > 0) {
+                preReleases.forEach(release => {
+                    console.log(`📅 ${release.album.name} by ${release.artist.name} on ${release.album.release_date}`);
+                });
+            } else {
+                console.log('🚫 No presave opportunities found in the next week');
+            }
             
-            // Get detailed information for ALL presave opportunities (they should be few)
+            // Get detailed information for ALL presave opportunities (they should be very few)
             if (preReleases.length > 0) {
                 const detailedReleases = [];
                 
                 console.log(`Getting detailed info for all ${preReleases.length} presave opportunities...`);
                 
-                // Process in batches of 3
-                for (let i = 0; i < preReleases.length; i += 3) {
-                    const detailBatch = preReleases.slice(i, i + 3);
-                    
-                    const detailPromises = detailBatch.map(async (release) => {
-                        try {
-                            await new Promise(resolve => setTimeout(resolve, 300));
-                            
-                            const albumResponse = await this.fetchWithRetry(
-                                `https://api.spotify.com/v1/albums/${release.album.id}`,
-                                { headers },
-                                2
-                            );
-                            
-                            if (!albumResponse.ok) {
-                                console.warn(`Failed to get detailed info for ${release.album.name}`);
-                                return release;
-                            }
-                            
-                            const fullAlbum = await albumResponse.json();
-                            
-                            return {
-                                ...release,
-                                album: fullAlbum
-                            };
-                        } catch (error) {
-                            console.error(`Error fetching album details for ${release.album.name}:`, error);
-                            return release;
+                // Process individually since there should be very few
+                for (const release of preReleases) {
+                    try {
+                        await new Promise(resolve => setTimeout(resolve, 300));
+                        
+                        const albumResponse = await this.fetchWithRetry(
+                            `https://api.spotify.com/v1/albums/${release.album.id}`,
+                            { headers },
+                            2
+                        );
+                        
+                        if (!albumResponse.ok) {
+                            console.warn(`Failed to get detailed info for ${release.album.name}`);
+                            detailedReleases.push(release);
+                            continue;
                         }
-                    });
-                    
-                    const detailResults = await Promise.all(detailPromises);
-                    detailedReleases.push(...detailResults);
+                        
+                        const fullAlbum = await albumResponse.json();
+                        
+                        detailedReleases.push({
+                            ...release,
+                            album: fullAlbum
+                        });
+                    } catch (error) {
+                        console.error(`Error fetching album details for ${release.album.name}:`, error);
+                        detailedReleases.push(release);
+                    }
                 }
                 
                 console.log(`Returning ${detailedReleases.length} detailed presave opportunities`);
