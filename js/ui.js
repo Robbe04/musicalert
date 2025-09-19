@@ -29,9 +29,6 @@ class UIService {
             // Aankomende releases heeft geen sorting/filtering
             console.log('Aankomende releases UI loaded');
         }
-        if (window.evenementenUI) {
-            window.evenementenUI.initialize();
-        }
 
         this.setupBasicUIElements();
         this.setupLiveSearch();
@@ -60,8 +57,7 @@ class UIService {
         while (Date.now() - startTime < maxWait) {
             if (window.gevolgdeDJsUI && 
                 window.nieuweReleasesUI && 
-                window.aankomendeReleasesUI && 
-                window.evenementenUI) {
+                window.aankomendeReleasesUI) {
                 console.log('All UI modules loaded successfully');
                 return;
             }

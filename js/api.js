@@ -693,58 +693,58 @@ class SpotifyApiService {
         return fetch(url, options);
     }
 
-    /**
-     * Get track recommendations based on favorite artists
-     * @param {Array} artistIds - Array of artist IDs
-     * @param {number} limit - Maximum number of tracks to recommend
-     */
-    async getTrackRecommendations(artistIds, limit = 10) {
-        try {
-            if (!artistIds.length) return [];
+    // /**
+    //  * Get track recommendations based on favorite artists
+    //  * @param {Array} artistIds - Array of artist IDs
+    //  * @param {number} limit - Maximum number of tracks to recommend
+    //  */
+    // async getTrackRecommendations(artistIds, limit = 10) {
+    //     try {
+    //         if (!artistIds.length) return [];
             
-            ui.showLoading('Aanbevelingen laden...');
+    //         ui.showLoading('Aanbevelingen laden...');
             
-            const headers = await this.getHeaders();
-            // Use up to 5 seed artists
-            const seedArtists = artistIds.slice(0, 5).join(',');
+    //         const headers = await this.getHeaders();
+    //         // Use up to 5 seed artists
+    //         const seedArtists = artistIds.slice(0, 5).join(',');
             
-            const response = await fetch(`https://api.spotify.com/v1/recommendations?seed_artists=${seedArtists}&limit=${limit}&market=NL`, {
-                headers
-            });
+    //         const response = await fetch(`https://api.spotify.com/v1/recommendations?seed_artists=${seedArtists}&limit=${limit}&market=NL`, {
+    //             headers
+    //         });
             
-            const data = await response.json();
+    //         const data = await response.json();
             
-            if (data.error) {
-                throw new Error(`API error: ${data.error.message}`);
-            }
+    //         if (data.error) {
+    //             throw new Error(`API error: ${data.error.message}`);
+    //         }
             
-            // Get full track details with audio features
-            const tracksWithAudioFeatures = await Promise.all(
-                data.tracks.map(async (track) => {
-                    try {
-                        const audioFeaturesResponse = await fetch(`https://api.spotify.com/v1/audio-features/${track.id}`, { headers });
-                        const audioFeatures = await audioFeaturesResponse.json();
+    //         // Get full track details with audio features
+    //         const tracksWithAudioFeatures = await Promise.all(
+    //             data.tracks.map(async (track) => {
+    //                 try {
+    //                     const audioFeaturesResponse = await fetch(`https://api.spotify.com/v1/audio-features/${track.id}`, { headers });
+    //                     const audioFeatures = await audioFeaturesResponse.json();
                         
-                        return {
-                            ...track,
-                            audioFeatures: audioFeatures,
-                            duration: this.formatDuration(track.duration_ms) // Include formatted duration
-                        };
-                    } catch (error) {
-                        console.error('Error fetching audio features:', error);
-                        return track;
-                    }
-                })
-            );
+    //                     return {
+    //                         ...track,
+    //                         audioFeatures: audioFeatures,
+    //                         duration: this.formatDuration(track.duration_ms) // Include formatted duration
+    //                     };
+    //                 } catch (error) {
+    //                     console.error('Error fetching audio features:', error);
+    //                     return track;
+    //                 }
+    //             })
+    //         );
             
-            ui.hideLoading();
-            return tracksWithAudioFeatures;
-        } catch (error) {
-            ui.hideLoading();
-            console.error('Error fetching track recommendations:', error);
-            return [];
-        }
-    }
+    //         ui.hideLoading();
+    //         return tracksWithAudioFeatures;
+    //     } catch (error) {
+    //         ui.hideLoading();
+    //         console.error('Error fetching track recommendations:', error);
+    //         return [];
+    //     }
+    // }
 
     /**
      * Get a specific album with all tracks

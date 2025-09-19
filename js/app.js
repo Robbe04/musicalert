@@ -75,6 +75,9 @@ class MusicAlertApp {
         // Initialize notifications (niet direct API-aanroepen doen)
         const notificationsInitialized = await notifications.init();
         
+        // Setup release age setting
+        this.setupReleaseAgeSetting();
+        
         // Display favorites first (dit gebruikt geen API)
         this.displayFavorites();
         
@@ -742,10 +745,6 @@ class MusicAlertApp {
         document.getElementById('tab-pre-releases').classList.remove('tab-active', 'text-primary');
         document.getElementById('tab-pre-releases').classList.add('text-gray-500');
         
-        // Handle events tab separately as it opens a modal
-        document.getElementById('tab-events').classList.remove('tab-active', 'text-primary');
-        document.getElementById('tab-events').classList.add('text-gray-500');
-        
         document.getElementById(`tab-${tab}`).classList.add('tab-active', 'text-primary');
         document.getElementById(`tab-${tab}`).classList.remove('text-gray-500');
         
@@ -767,16 +766,6 @@ class MusicAlertApp {
         }
     }
     
-    /**
-     * Show the events panel
-     */
-    showEventsPanel() {
-        // If the showEventsPanel function exists in the global scope, call it
-        if (typeof window.showEventsPanel === 'function') {
-            window.showEventsPanel();
-        }
-    }
-
     /**
      * Export favorites to a JSON file
      */

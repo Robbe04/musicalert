@@ -285,10 +285,6 @@
                         class="px-4 md:px-6 py-2 md:py-3 font-medium text-gray-500 whitespace-nowrap text-sm md:text-base">
                         <i class="fas fa-hourglass-half mr-2"></i>Aankomende Releases
                     </button>
-                    <button id="tab-events" onclick="app.showEventsPanel()" 
-                        class="px-4 md:px-6 py-2 md:py-3 font-medium text-gray-500 whitespace-nowrap text-sm md:text-base">
-                        <i class="fas fa-calendar-alt mr-2"></i>Evenementen
-                    </button>
                 </div>
                 
                 <div class="bg-white rounded-b-xl md:rounded-b-2xl shadow-lg p-4 md:p-8">
@@ -453,16 +449,6 @@
                 </h3>
                 
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <!-- DJ Evenementen module blijft behouden -->
-                    <div class="p-4 border border-gray-200 rounded-lg">
-                        <h4 class="font-bold mb-2 flex items-center">
-                            <i class="fas fa-calendar-alt mr-2 text-primary"></i>DJ Evenementen
-                        </h4>
-                        <p class="text-sm text-gray-600 mb-3">Bekijk aankomende optredens van je favoriete DJ's.</p>
-                        <button onclick="showEventsPanel()" class="w-full bg-primary hover:bg-primary-dark text-white py-2 rounded-lg transition">
-                            <i class="fas fa-ticket-alt mr-2"></i>Bekijk Evenementen
-                        </button>
-                    </div>
                     
                     <!-- Import/Export module blijft behouden -->
                     <div class="p-4 border border-gray-200 rounded-lg">
@@ -540,10 +526,6 @@
                     <button onclick="app.switchTab('pre-releases'); app.closeQuickActions()" class="w-full text-left p-3 hover:bg-gray-100 rounded-lg flex items-center">
                         <i class="fas fa-hourglass-half mr-3 text-orange-500"></i>
                         <span class="font-medium">Aankomende Releases</span>
-                    </button>
-                    <button onclick="showEventsPanel(); app.closeQuickActions()" class="w-full text-left p-3 hover:bg-gray-100 rounded-lg flex items-center">
-                        <i class="fas fa-calendar-alt mr-3 text-green-500"></i>
-                        <span class="font-medium">DJ Evenementen</span>
                     </button>
                 </div>
                 
@@ -634,73 +616,6 @@
         </div>
     </div>
     
-    <!-- Events Panel Modal -->
-    <div id="events-panel" class="fixed inset-0 bg-black bg-opacity-50 z-50 hidden flex items-center justify-center">
-        <div class="bg-white dark:bg-gray-800 rounded-xl m-4 w-full max-w-2xl overflow-hidden animate__animated animate__fadeInUp">
-            <div class="p-4 bg-primary text-white">
-                <h3 class="font-bold flex items-center">
-                    <i class="fas fa-calendar-alt mr-2"></i>Aankomende DJ Evenementen
-                </h3>
-            </div>
-            
-            <div class="p-5">
-                <!-- Event Filter Controls -->
-                <div class="mb-4 flex flex-col sm:flex-row justify-between items-center space-y-2 sm:space-y-0">
-                    <div class="relative w-full sm:w-64">
-                        <input 
-                            type="text" 
-                            id="event-search" 
-                            placeholder="Zoek evenementen..." 
-                            class="w-full pl-9 pr-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary text-sm"
-                        >
-                        <i class="fas fa-search absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"></i>
-                    </div>
-                    <div class="w-full sm:w-auto flex space-x-2">
-                        <select 
-                            id="event-filter" 
-                            class="border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-primary text-sm"
-                        >
-                            <option value="">Alle types</option>
-                            <option value="festival">Festivals</option>
-                            <option value="club">Clubnachten</option>
-                            <option value="concert">Concerten</option>
-                            <option value="live stream">Live Streams</option>
-                        </select>
-                        <button 
-                            id="refresh-events" 
-                            class="bg-primary hover:bg-primary-dark text-white px-3 py-2 rounded-lg text-sm transition-colors"
-                        >
-                            <i class="fas fa-sync-alt mr-1"></i>Vernieuwen
-                        </button>
-                    </div>
-                </div>
-                
-                <div id="events-loading" class="text-center py-6">
-                    <i class="fas fa-spinner fa-spin text-3xl text-primary mb-3"></i>
-                    <p>Evenementen laden...</p>
-                </div>
-                
-                <div id="events-list" class="hidden max-h-96 overflow-y-auto">
-                    <!-- Event items will be added here -->
-                </div>
-                
-                <div id="no-events" class="text-center py-8 hidden">
-                    <div class="text-gray-400 mb-4">
-                        <i class="fas fa-calendar-times text-5xl"></i>
-                    </div>
-                    <p class="text-gray-500">Geen aankomende evenementen gevonden</p>
-                    <p class="text-gray-500 text-sm mt-2">Volg meer DJ's om hun events te zien</p>
-                </div>
-            </div>
-            
-            <div class="p-3 border-t">
-                <button onclick="hideEventsPanel()" class="w-full text-center p-3 bg-gray-200 hover:bg-gray-300 rounded-lg transition">
-                    Sluiten
-                </button>
-            </div>
-        </div>
-    </div>
-    
     <!-- Loading Overlay -->
     <div id="loading-overlay" class="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50 hidden">
         <div class="bg-white dark:bg-gray-800 p-8 rounded-lg flex flex-col items-center">
@@ -755,237 +670,10 @@
     <script src="ui/gevolgde_djs.js"></script>
     <script src="ui/nieuwe_releases.js"></script>
     <script src="ui/aankomende_releases.js"></script>
-    <script src="ui/evenementen.js"></script>
+
     
     <script src="js/app.js"></script>
-    <script src="js/events-manager.js"></script>
     <script src="js/social-sharing.js"></script>
-    
-    <!-- Script for new modules UI integration -->
-    <script>
-        // Events panel functions - KEEP ONLY EVENTS FUNCTIONS
-        function showEventsPanel() {
-            const panel = document.getElementById('events-panel');
-            const eventsList = document.getElementById('events-list');
-            const noEvents = document.getElementById('no-events');
-            const loadingIndicator = document.getElementById('events-loading');
-            
-            // Show panel
-            panel.classList.remove('hidden');
-            
-            // Show loading indicator
-            loadingIndicator.classList.remove('hidden');
-            eventsList.classList.add('hidden');
-            noEvents.classList.add('hidden');
-            
-            // Load events for all favorite artists
-            loadUpcomingEvents();
-            
-            // Setup search and filter functionality
-            setupEventFilters();
-        }
-        
-        function hideEventsPanel() {
-            document.getElementById('events-panel').classList.add('hidden');
-        }
-        
-        function setupEventFilters() {
-            const searchInput = document.getElementById('event-search');
-            const filterSelect = document.getElementById('event-filter');
-            const refreshButton = document.getElementById('refresh-events');
-            
-            // Live search functionality
-            searchInput.addEventListener('input', function() {
-                const keyword = this.value.trim();
-                filterEvents(keyword, filterSelect.value);
-            });
-            
-            // Type filter
-            filterSelect.addEventListener('change', function() {
-                filterEvents(searchInput.value.trim(), this.value);
-            });
-            
-            // Refresh button
-            refreshButton.addEventListener('click', function() {
-                // Clear cached events
-                eventsManager.eventsCache.clear();
-                
-                // Reload events
-                loadUpcomingEvents();
-            });
-        }
-        
-        function filterEvents(keyword, eventType) {
-            // Get all event elements
-            const allEvents = Array.from(document.querySelectorAll('.event-item'));
-            
-            if (!keyword && !eventType) {
-                // Show all events
-                allEvents.forEach(event => event.classList.remove('hidden'));
-                return;
-            }
-            
-            allEvents.forEach(event => {
-                const eventData = event.dataset;
-                const matchesType = !eventType || eventData.type === eventType;
-                const matchesKeyword = !keyword || 
-                    eventData.name.toLowerCase().includes(keyword.toLowerCase()) ||
-                    eventData.artist.toLowerCase().includes(keyword.toLowerCase()) ||
-                    eventData.location.toLowerCase().includes(keyword.toLowerCase());
-                
-                if (matchesType && matchesKeyword) {
-                    event.classList.remove('hidden');
-                } else {
-                    event.classList.add('hidden');
-                }
-            });
-            
-            // Check if no events are visible
-            const visibleEvents = allEvents.filter(event => !event.classList.contains('hidden'));
-            
-            if (visibleEvents.length === 0) {
-                document.getElementById('no-events').classList.remove('hidden');
-            } else {
-                document.getElementById('no-events').classList.add('hidden');
-            }
-        }
-        
-        async function loadUpcomingEvents() {
-            try {
-                const favoriteArtists = app.favorites;
-                
-                if (!favoriteArtists || favoriteArtists.length === 0) {
-                    // No favorites, show no events message
-                    document.getElementById('events-loading').classList.add('hidden');
-                    document.getElementById('no-events').classList.remove('hidden');
-                    return;
-                }
-                
-                // Get events from the events manager
-                const events = await eventsManager.getUpcomingEvents(favoriteArtists);
-                
-                // Hide loading indicator
-                document.getElementById('events-loading').classList.add('hidden');
-                
-                if (!events || events.length === 0) {
-                    // No events found
-                    document.getElementById('no-events').classList.remove('hidden');
-                } else {
-                    // Display events
-                    displayEvents(events);
-                    document.getElementById('events-list').classList.remove('hidden');
-                }
-            } catch (error) {
-                console.error('Error loading events:', error);
-                document.getElementById('events-loading').classList.add('hidden');
-                document.getElementById('no-events').classList.remove('hidden');
-            }
-        }
-        
-        function displayEvents(events) {
-            const eventsList = document.getElementById('events-list');
-            eventsList.innerHTML = '';
-            
-            // Sort events by date (closest first)
-            events.sort((a, b) => new Date(a.date) - new Date(b.date));
-            
-            events.forEach(event => {
-                const eventDate = new Date(event.date);
-                const formattedDate = eventDate.toLocaleDateString('nl-NL', { 
-                    weekday: 'long', 
-                    day: 'numeric', 
-                    month: 'long', 
-                    year: 'numeric' 
-                });
-                
-                const eventElement = document.createElement('div');
-                eventElement.className = 'event-item bg-white dark:bg-gray-700 p-4 rounded-lg shadow-md mb-4';
-                
-                // Add data attributes for filtering
-                eventElement.dataset.type = event.type;
-                eventElement.dataset.name = event.name;
-                eventElement.dataset.artist = event.artistName;
-                eventElement.dataset.location = `${event.location.name} ${event.location.city}`;
-                
-                // Create a tag for the event type
-                const eventTypeTag = getEventTypeTag(event.type);
-                
-                // Create a tag for ticket status
-                const ticketStatusTag = getTicketStatusTag(event.ticketStatus);
-                
-                eventElement.innerHTML = `
-                    <div class="flex">
-                        <div class="flex-shrink-0 mr-4 hidden sm:block">
-                            <div class="w-16 h-16 rounded-lg overflow-hidden bg-gray-200">
-                                <img src="${event.image || 'img/placeholder-dj.jpg'}" alt="${event.artistName}" class="w-full h-full object-cover">
-                            </div>
-                        </div>
-                        <div class="flex-1">
-                            <div class="flex items-start justify-between">
-                                <div>
-                                    <h5 class="font-bold">${event.name}</h5>
-                                    <p class="text-primary dark:text-primary-light text-sm">${event.artistName}</p>
-                                    <p class="text-sm text-gray-600 dark:text-gray-300 mt-1">
-                                        <i class="fas fa-map-marker-alt mr-1"></i> 
-                                        ${event.location.name}, ${event.location.city}
-                                    </p>
-                                </div>
-                                <div class="text-right">
-                                    <div class="bg-secondary bg-opacity-20 dark:bg-opacity-30 text-secondary-dark dark:text-secondary-light px-2 py-1 rounded-full text-sm">
-                                        ${formattedDate}
-                                    </div>
-                                    <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">${getRelativeTime(eventDate)}</p>
-                                </div>
-                            </div>
-                            <div class="mt-3 flex justify-between items-center">
-                                <span class="text-xs px-2 py-1 ${eventTypeTag.bgColor} rounded-full">
-                                    ${eventTypeTag.label}
-                                </span>
-                                ${event.ticketStatus === 'on sale' ? 
-                                    `<a href="${event.ticketUrl}" target="_blank" class="bg-green-500 hover:bg-green-600 text-white px-3 py-1 rounded-lg text-sm transition">
-                                        <i class="fas fa-ticket-alt mr-1"></i>Tickets
-                                    </a>` : 
-                                    `<span class="text-xs px-2 py-1 ${ticketStatusTag.bgColor} rounded-full">
-                                        ${ticketStatusTag.label}
-                                    </span>`
-                                }
-                            </div>
-                        </div>
-                    </div>
-                `;
-                
-                eventsList.appendChild(eventElement);
-            });
-        }
-        
-        function getEventTypeTag(type) {
-            switch(type) {
-                case 'festival':
-                    return { label: 'Festival', bgColor: 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200' };
-                case 'club':
-                    return { label: 'Club', bgColor: 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200' };
-                case 'concert':
-                    return { label: 'Concert', bgColor: 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200' };
-                case 'live stream':
-                    return { label: 'Live Stream', bgColor: 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200' };
-                default:
-                    return { label: type.charAt(0).toUpperCase() + type.slice(1), bgColor: 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300' };
-            }
-        }
-        
-        function getTicketStatusTag(status) {
-            switch(status) {
-                case 'sold out':
-                    return { label: 'Uitverkocht', bgColor: 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200' };
-                case 'soon':
-                    return { label: 'Binnenkort', bgColor: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200' };
-                case 'pre-sale':
-                    return { label: 'Pre-sale', bgColor: 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200' };
-                default:
-                    return { label: status, bgColor: 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300' };
-            }
-        }
-    </script>
     
     <!-- Utility functions -->
     <script>
