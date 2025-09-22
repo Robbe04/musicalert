@@ -356,6 +356,13 @@ class MusicAlertApp {
             // Fallback: toon een simpele lijst
             this._fallbackDisplayFavorites();
         }
+        
+        // Update the artist count
+        const artistCountEl = document.getElementById('artist-count');
+        if (artistCountEl) {
+            const totalCount = this.favorites.length;
+            artistCountEl.textContent = `${totalCount} ${totalCount === 1 ? 'artiest' : 'artiesten'}`;
+        }
     }
 
     /**

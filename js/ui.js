@@ -87,7 +87,8 @@ class UIService {
     }
 
     /**
-     * Setup live search met debounce
+     * Functie die ervoor zorgt dat wanneer je een dj opzoekt in de zoekbalk 
+     * dat er een klein delay is zodat je niet per letter één API-request stuurt
      */
     setupLiveSearch() {
         const searchInput = document.getElementById('artistInput');
@@ -139,7 +140,8 @@ class UIService {
     }
 
     /**
-     * Toon artist suggesties onder zoekvenster
+     * Wanneer je minimum 2 letters hebt getypt komen er suggesties te staan
+     * voor wie je wil zoeken om toe te voegen aan je gevolgde dj's
      */
     displayArtistSuggestions(artists) {
         const container = document.getElementById('artistSuggestions');
@@ -185,7 +187,7 @@ class UIService {
     }
 
     /**
-     * Toon laatste tracks van artiest
+     * Toon laatste tracks van artiest in tablad gevolgde dj's
      */
     displayLatestTracks(artist, albums, relatedArtists = []) {
         const resultsContainer = document.getElementById('results');

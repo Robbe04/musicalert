@@ -239,24 +239,6 @@
                 <div class="mb-4 md:mb-6 relative">
                     <div class="flex items-center mb-3">
                         <h4 class="text-sm font-medium text-gray-700">Zoek op artiest</h4>
-                        
-                        <!-- Genre filter toggle button -->
-                        <button id="genre-filter-toggle" class="ml-auto inline-flex items-center text-xs text-primary hover:text-primary-dark">
-                            <span>Filter op genre</span>
-                            <span id="genre-filter-count" class="hidden ml-1 bg-primary text-white text-xs w-5 h-5 rounded-full flex items-center justify-center">0</span>
-                            <i class="fas fa-chevron-down ml-1"></i>
-                        </button>
-                    </div>
-                    
-                    <!-- Genre filter panel -->
-                    <div id="genre-filter-panel" class="absolute right-0 z-20 mt-1 bg-white rounded-lg shadow-lg border border-gray-200 w-full sm:w-80 hidden">
-                        <div class="p-2 border-b border-gray-200">
-                            <h5 class="font-medium">Filter op genre</h5>
-                            <p class="text-xs text-gray-500">Selecteer een of meerdere genres om je zoekresultaten te filteren</p>
-                        </div>
-                        <div id="pre-search-genres" class="overflow-hidden">
-                            <!-- Genres will be loaded here -->
-                        </div>
                     </div>
                     
                     <div class="relative">
@@ -290,7 +272,12 @@
                 <div class="bg-white rounded-b-xl md:rounded-b-2xl shadow-lg p-4 md:p-8">
                     <!-- Favorites Section -->
                     <div id="favorites-content" class="tab-content">
-                        <h3 class="text-xl md:text-2xl font-bold mb-4 md:mb-6 text-primary">Jouw Gevolgde Artiesten</h3>
+                        <div class="flex justify-between items-center mb-4 md:mb-6">
+                            <h3 class="text-xl md:text-2xl font-bold text-primary">Jouw Gevolgde Artiesten</h3>
+                            <div id="artist-count" class="bg-primary text-white text-sm font-medium px-3 py-1 rounded-full">
+                                0 artiesten
+                            </div>
+                        </div>
                         
                         <!-- Favorites Filter and Sort Controls -->
                         <div id="favorites-filter-container" class="mb-6 bg-gray-50 p-3 rounded-lg">
